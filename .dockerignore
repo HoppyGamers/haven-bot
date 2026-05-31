@@ -1,0 +1,26 @@
+# Dependencies — reinstalled inside the container
+node_modules/
+
+# Environment — never bake secrets into the image
+.env
+
+# Database — lives in the mounted volume, not the image
+*.db
+
+# Dev/docs files not needed at runtime
+.git/
+.gitignore
+*.md
+docker-compose.yml
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

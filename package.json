@@ -1,0 +1,25 @@
+{
+  "name": "haven-bot",
+  "version": "1.0.0",
+  "description": "A fully functioning bot for Haven voice chat server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "setup": "node src/setup.js"
+  },
+  "keywords": [
+    "haven",
+    "bot",
+    "webhook",
+    "voice-chat"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^16.6.1"
+  }
+}

@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment — never commit secrets
+.env
+
+# Database files — user data stays local
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / editor config
+.vscode/
+.idea/
+.continue/
