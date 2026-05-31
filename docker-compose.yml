@@ -1,9 +1,6 @@
-version: '3.8'
-
 services:
   haven-bot:
-    build: .
-    image: haven-bot:latest
+    image: ghcr.io/hoppygamers/haven-bot:latest
     container_name: haven-bot
     restart: unless-stopped
 
@@ -13,7 +10,7 @@ services:
 
     volumes:
       # Persist the database across container restarts and updates.
-      # The DB_PATH env var in the Dockerfile points here automatically.
+      # The DB_PATH env var points here automatically.
       - haven_data:/data
 
     ports:
@@ -22,14 +19,6 @@ services:
       # Must match the port in your CALLBACK_URL env var.
       - "3000:3000"
 
-    # Limit resource usage to prevent a runaway process from affecting the host
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.5'
-
-    # Log rotation — keeps logs from filling up disk on long-running servers
     logging:
       driver: json-file
       options:
