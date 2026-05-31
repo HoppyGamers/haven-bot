@@ -4,6 +4,17 @@ All notable changes to Haven Bot are documented here.
 
 ---
 
+## [1.3.3] — 2026-05-31
+
+### Changed
+- Removed `src/commands/music.js` — duplicate of `soundboard.js`, was never imported
+- Removed `src/commands/default.js` — leftover scaffold from early Discord bot attempt, never used
+- Cleaned up `FIX #N` legacy debug comments throughout codebase — replaced with proper descriptions
+- Removed stack trace dump from null token error in `bot.js` — was a debugging aid, too noisy for production
+- Fixed stale docstring in `channels.js` referencing `/cb/<token>` instead of `/cb/<n>`
+
+---
+
 ## [1.3.2] — 2026-05-31
 
 ### Fixed

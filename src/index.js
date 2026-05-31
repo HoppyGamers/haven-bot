@@ -57,8 +57,7 @@ bot.on('command', async (data) => {
   });
 
   // Award XP and check achievements
-  // FIX #1: skip XP for moderation/admin/daily commands (daily handles its own)
-  // FIX #2: skip achievement checks for commands that can't change rank/messages
+  // Skip XP for moderation/admin/daily commands, skip achievements for read-only commands
   const skipXp          = ['ban','kick','warn','mute','unmute','unban','warnings','modlog','addadmin','removeadmin','admins','addcommand','editcommand','removecommand','daily','calendar','rss'].includes(command);
   const skipAchievements = ['help','ping','sounds','stopsound','commands','customcommands','profile','leaderboard','top','calendar','rss'].includes(command);
 
@@ -68,7 +67,7 @@ bot.on('command', async (data) => {
     users.getOrCreate(userId, user);
     channels.getOrCreate(data.channel_id, 'Channel');
 
-    // FIX 13: first-time user greeting
+    // First-time user greeting
     if (!existingUser) {
       const defaultGreeting = `👋 Welcome to the server, **${user}**! Type \`/help\` to see what I can do.`;
       const greeting = (process.env.BOT_FIRST_TIME_GREETING || defaultGreeting)
@@ -79,7 +78,7 @@ bot.on('command', async (data) => {
     if (!skipXp && !isOnXpCooldown(userId)) {
       setXpCooldown(userId);
       const xpResult = stats.addMessage(userId, data.channel_id, 10);
-      // FIX 7: announce level up mid-conversation
+      // Announce level up
       if (xpResult && xpResult.leveledUp) {
         await bot.sendMessage(
           `🎉 **Level Up!** **${user}** reached level ${xpResult.newLevel}!`,

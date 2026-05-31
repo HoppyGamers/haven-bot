@@ -53,7 +53,7 @@ module.exports = {
       formatCategory('🏆', earned.leaderboard),
     ].filter(Boolean);
 
-    // FIX 12: only show earned achievements — no empty categories
+    // Only show earned achievements — skip empty categories
     const achievementSection = totalEarned > 0
       ? `\n🏆 **Achievements (${totalEarned}/${totalPossible})**\n${achievementLines.join('\n')}`
       : `\n🏆 **Achievements (0/${totalPossible})**\n*No achievements yet!*`;

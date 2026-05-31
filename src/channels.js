@@ -153,7 +153,7 @@ class ChannelManager {
    * Used when registering webhooks so Haven knows which path to POST to.
    * Base URL comes from CALLBACK_URL env var.
    * Single channel: uses CALLBACK_URL as-is (backward compatible)
-   * Multi channel:  appends /cb/<token> so the server can identify the source
+   * Multi channel:  appends /cb/<n> (short numeric index) so the server can identify the source
    */
   getCallbackUrl(token) {
     const base = (process.env.CALLBACK_URL || '').replace(/\/$/, '');

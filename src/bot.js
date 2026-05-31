@@ -176,8 +176,7 @@ class HavenBot extends EventEmitter {
       : this.token;
 
     if (!token) {
-      console.error(`[sendMessage] No token found for channelCode: ${channelCode} — registered channels:`, [...this.channelManager.tokenByCode.entries()]);
-      console.error(`[sendMessage] Stack:`, new Error().stack.split('\n').slice(1,5).join('\n'));
+      console.error(`[sendMessage] No token found for channelCode: ${channelCode}`);
       throw new Error(`No token for channel ${channelCode}`);
     }
 
@@ -401,8 +400,8 @@ class HavenBot extends EventEmitter {
   }
   
   // --- Command Handlers ---
-  // FIX #4: All command routing lives in index.js.
-  // This method is only kept for the internal ping used during init checks.
+  // All command routing lives in index.js via the 'command' event.
+  // This method stub is kept for backward compatibility only.
   _getCommandHandler(command) {
     const handlers = {
       ping: async (data) => {

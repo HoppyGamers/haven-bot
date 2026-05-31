@@ -50,7 +50,6 @@ function initializeDatabase() {
     )
   `);
 
-  // FIX #9: added duration_minutes per PHASE2 spec
   db.exec(`
     CREATE TABLE IF NOT EXISTS mod_logs (
       id INTEGER PRIMARY KEY,
@@ -437,7 +436,6 @@ const stats = {
 // Moderation log operations
 // ---------------------------------------------------------------------------
 const modLogs = {
-  // FIX #9: accepts optional durationMinutes
   log(channelId, action, targetUserId, modUserId, reason = '', durationMinutes = null) {
     return db.prepare(
       'INSERT INTO mod_logs (channel_id, action, target_user_id, mod_user_id, reason, duration_minutes) VALUES (?, ?, ?, ?, ?, ?)'
@@ -478,7 +476,6 @@ const admins = {
 
 // ---------------------------------------------------------------------------
 // Ban operations
-// FIX #3: ensureUserExists() called before any FK-constrained insert
 // ---------------------------------------------------------------------------
 function ensureUserExists(userId, username) {
   const existing = db.prepare('SELECT id FROM users WHERE user_id = ?').get(userId);
@@ -519,7 +516,6 @@ const bans = {
 
 // ---------------------------------------------------------------------------
 // Warning operations
-// FIX #3: ensureUserExists() called before insert
 // ---------------------------------------------------------------------------
 const warnings = {
   add(userId, channelId, reason = '', modUserId = 'system', username = null) {
@@ -544,8 +540,6 @@ const warnings = {
 
 // ---------------------------------------------------------------------------
 // Mute operations
-// FIX #3: ensureUserExists() called before insert
-// FIX #8: expireOld() marks stale active mutes as inactive
 // ---------------------------------------------------------------------------
 const mutes = {
   add(userId, channelId, reason = '', mutedBy = 'system', durationMinutes = 60, username = null) {
@@ -579,7 +573,7 @@ const mutes = {
     ).get(userId, channelId);
   },
 
-  // FIX #8: flip active=0 on any mute whose time has passed
+  // Expire mutes whose time has passed
   expireOld() {
     db.prepare("UPDATE mutes SET active = 0 WHERE active = 1 AND expires_at <= CURRENT_TIMESTAMP").run();
   },

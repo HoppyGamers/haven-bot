@@ -508,7 +508,7 @@ function formatDuration(minutes) {
 
 
 // ---------------------------------------------------------------------------
-// /removeadmin @user  — FIX #7
+// /removeadmin @user
 // ---------------------------------------------------------------------------
 async function removeadmin(bot, data) {
   const { userId, username, args } = parseData(data);
