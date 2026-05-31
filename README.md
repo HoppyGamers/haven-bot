@@ -285,6 +285,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
+## 🤖 Built with AI Assistance
+
+`haven-bot` was built using [vibe coding](https://en.wikipedia.org/wiki/Vibe_coding) — an AI-assisted development workflow where a human guides an AI through design decisions, debugging, and iteration. The project is fully functional but community review is welcome. If you find edge cases or bugs, please open an issue on GitHub.
+
+---
+
 ## 📄 License
 
 MIT — see [LICENSE](LICENSE) for details.
