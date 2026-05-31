@@ -14,6 +14,15 @@ function parseData(data) {
   };
 }
 
+
+/**
+ * Call a Haven moderation endpoint via the webhook token.
+ * Returns { success: true } or throws with the error message.
+ */
+async function havenModRequest(bot, endpoint, body) {
+  return bot._safeRequest('POST', `/api/webhooks/${bot.token}/moderation/${endpoint}`, body);
+}
+
 // ---------------------------------------------------------------------------
 // /addadmin [@user] [role]
 // ---------------------------------------------------------------------------
@@ -106,15 +115,31 @@ async function ban(bot, data) {
     return bot.sendMessage(`⚠️ **Already Banned**\n${targetUsername} is already banned.`);
   }
 
+  // Call Haven ban API
+  let banned = false;
+  let apiError = null;
+  try {
+    await havenModRequest(bot, 'ban', { userId: targetUserId, reason });
+    banned = true;
+  } catch (err) {
+    apiError = err.message;
+    console.error('[ban] Haven API error:', err.message);
+  }
+
   bans.add(targetUserId, targetUsername, reason, username);
   modLogs.log(channelId, 'ban', targetUserId, username, reason);
 
-  return bot.sendMessage(
-    `🔨 **User Banned (Recorded)**\n` +
-    `**${targetUsername}** has been recorded as banned.\n` +
-    `**Reason:** ${reason}\n` +
-    `*Haven has no ban API — this is logged locally. Remove them from the server manually.*`
-  );
+  if (banned) {
+    return bot.sendMessage(
+      `🔨 **User Banned**\n**${targetUsername}** has been banned.\n**Reason:** ${reason}`
+    );
+  } else {
+    return bot.sendMessage(
+      `⚠️ **Ban Recorded (Action Failed)**\n` +
+      `**${targetUsername}** was logged as banned but the Haven API returned an error.\n` +
+      `**Reason:** ${reason}\n*Error: ${apiError}*`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,19 +160,15 @@ async function kick(bot, data) {
   const targetUserId   = resolveUserId(targetUsername);
   const reason         = args.slice(1).join(' ') || 'No reason provided';
 
-  // Call the Haven moderation API using the issuing admin's user ID
+  // Call Haven kick API
   let kicked = false;
   let apiError = null;
   try {
-    await bot._safeRequest('POST', '/api/moderation/kick', {
-      user: { id: parseInt(userId) }, // admin issuing the kick
-      userId: parseInt(targetUserId) || targetUserId,
-      channelId,
-    });
+    await havenModRequest(bot, 'kick', { userId: targetUserId, channelCode: channelId, reason });
     kicked = true;
   } catch (err) {
     apiError = err.message;
-    console.error(`[kick] Haven API error:`, err.message);
+    console.error('[kick] Haven API error:', err.message);
   }
 
   modLogs.log(channelId, 'kick', targetUserId, username, reason);
@@ -210,14 +231,10 @@ async function warn(bot, data) {
   let message = `⚠️ **Warning Issued**\n**${targetUsername}** has been warned.\n**Reason:** ${reason}\n**Warnings:** ${warnCount}/3`;
 
   if (warnCount >= 3) {
-    // Attempt real kick via Haven API on 3rd warning
+    // Auto-kick via Haven API on 3rd warning
     let autoKicked = false;
     try {
-      await bot._safeRequest('POST', '/api/moderation/kick', {
-        user: { id: parseInt(userId) },
-        userId: parseInt(targetUserId) || targetUserId,
-        channelId,
-      });
+      await havenModRequest(bot, 'kick', { userId: targetUserId, channelCode: channelId, reason: 'Auto-kicked: 3 warnings' });
       autoKicked = true;
     } catch (err) {
       console.error('[warn] Auto-kick API error:', err.message);
@@ -288,12 +305,28 @@ async function mute(bot, data) {
     console.error('[mute] Achievement check error:', err.message);
   }
 
-  return bot.sendMessage(
-    `🔇 **Mute Recorded**\n` +
-    `**${targetUsername}** has been recorded as muted for **${formatDuration(durationMinutes)}**.\n` +
-    `**Reason:** ${reason}\n` +
-    `*Haven has no mute API — this is logged locally. Silence them manually if needed.*`
-  );
+  // Call Haven mute API
+  let muted = false;
+  let muteApiError = null;
+  try {
+    await havenModRequest(bot, 'mute', { userId: targetUserId, duration: durationMinutes, reason });
+    muted = true;
+  } catch (err) {
+    muteApiError = err.message;
+    console.error('[mute] Haven API error:', err.message);
+  }
+
+  if (muted) {
+    return bot.sendMessage(
+      `🔇 **User Muted**\n**${targetUsername}** has been muted for **${formatDuration(durationMinutes)}**.\n**Reason:** ${reason}`
+    );
+  } else {
+    return bot.sendMessage(
+      `⚠️ **Mute Recorded (Action Failed)**\n` +
+      `**${targetUsername}** was logged as muted but the Haven API returned an error.\n` +
+      `**Reason:** ${reason}\n*Error: ${muteApiError}*`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -317,10 +350,28 @@ async function unmute(bot, data) {
     return bot.sendMessage(`⚠️ **Not Muted**\n${targetUsername} is not muted in this channel.`);
   }
 
+  // Call Haven unmute API
+  let unmuted = false;
+  let unmuteApiError = null;
+  try {
+    await havenModRequest(bot, 'unmute', { userId: targetUserId });
+    unmuted = true;
+  } catch (err) {
+    unmuteApiError = err.message;
+    console.error('[unmute] Haven API error:', err.message);
+  }
+
   mutes.remove(targetUserId, channelId);
   modLogs.log(channelId, 'unmute', targetUserId, username, 'Unmuted');
 
-  return bot.sendMessage(`🔊 **User Unmuted**\n**${targetUsername}** has been unmuted.`);
+  if (unmuted) {
+    return bot.sendMessage(`🔊 **User Unmuted**\n**${targetUsername}** has been unmuted.`);
+  } else {
+    return bot.sendMessage(
+      `⚠️ **Unmute Recorded (Action Failed)**\n` +
+      `**${targetUsername}** was logged as unmuted but the Haven API returned an error.\n*Error: ${unmuteApiError}*`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -344,10 +395,28 @@ async function unban(bot, data) {
     return bot.sendMessage(`⚠️ **Not Banned**\n${targetUsername} is not currently banned.`);
   }
 
+  // Call Haven unban API
+  let unbanned = false;
+  let unbanApiError = null;
+  try {
+    await havenModRequest(bot, 'unban', { userId: targetUserId });
+    unbanned = true;
+  } catch (err) {
+    unbanApiError = err.message;
+    console.error('[unban] Haven API error:', err.message);
+  }
+
   bans.remove(targetUserId);
   modLogs.log(channelId, 'unban', targetUserId, username, 'Unbanned');
 
-  return bot.sendMessage(`✅ **User Unbanned**\n**${targetUsername}** has been unbanned.`);
+  if (unbanned) {
+    return bot.sendMessage(`✅ **User Unbanned**\n**${targetUsername}** has been unbanned.`);
+  } else {
+    return bot.sendMessage(
+      `⚠️ **Unban Recorded (Action Failed)**\n` +
+      `**${targetUsername}** was logged as unbanned but the Haven API returned an error.\n*Error: ${unbanApiError}*`
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

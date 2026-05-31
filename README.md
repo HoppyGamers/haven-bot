@@ -25,8 +25,9 @@ A feature-rich community bot for [Haven](https://github.com/ancsemi/Haven) voice
 - Visible in `/profile`
 
 ### 🛡️ Moderation
-- `/kick` — removes user from channel (live Haven API action)
-- `/ban`, `/mute` — recorded locally with audit trail (pending Haven moderation API)
+- `/kick` — removes user from channel
+- `/ban` / `/unban` — permanently ban or unban a user
+- `/mute` / `/unmute` — temporarily silence a user
 - `/warn` — warning system with auto-kick at 3 warnings
 - `/modlog` — full audit trail
 - Role-based admin system (`/addadmin`, `/removeadmin`, `/admins`)
@@ -193,12 +194,12 @@ Response variables: `{user}`, `{channel}`, `{count}`
 ### Moderation *(admin only)*
 | Command | Description |
 |---|---|
-| `/kick @user [reason]` | Kick user from channel *(live Haven API)* |
-| `/ban @user [reason]` | Record a ban *(log only — pending Haven API)* |
-| `/unban @user` | Clear a ban record |
+| `/kick @user [reason]` | Kick user from channel |
+| `/ban @user [reason]` | Ban a user from the server |
+| `/unban @user` | Unban a user |
 | `/warn @user [reason]` | Issue a warning (3 = auto-kick) |
-| `/mute @user [duration] [reason]` | Record a mute *(log only — pending Haven API)* |
-| `/unmute @user` | Clear a mute record |
+| `/mute @user [duration] [reason]` | Mute a user temporarily |
+| `/unmute @user` | Unmute a user |
 | `/warnings [@user]` | Check warnings |
 | `/modlog` | View recent moderation actions |
 | `/addadmin [@user] [role]` | Add admin or moderator |
@@ -206,8 +207,6 @@ Response variables: `{user}`, `{channel}`, `{count}`
 | `/admins` | List all admins |
 
 Duration format: `30m`, `2h`, `1d`
-
-> **Note:** Haven currently only exposes a kick endpoint via the bot API. Ban and mute commands record actions locally for audit purposes. A [feature request](https://github.com/ancsemi/Haven/issues) has been submitted for full moderation API support.
 
 ---
 
