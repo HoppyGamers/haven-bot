@@ -234,7 +234,7 @@ bot.on('command', async (data) => {
 
     // --- Help ---
     case 'help':
-      await channelBot.sendMessage(`
+      const helpText = `
 🤖 **Haven Bot Help**
 
 **User Profile:**
@@ -281,7 +281,21 @@ bot.on('command', async (data) => {
 **Fun:**
 \`/ping\` - Test the bot
 \`/help\` - This message
-      `.trim());
+      `.trim();
+
+      const helpDeleteSecs = parseInt(process.env.HELP_DELETE_SECONDS || '0', 10);
+      const helpMsg = await bot.sendMessage(helpText, enrichedData.channel_id);
+
+      // Auto-delete help message after configured delay (0 = never delete)
+      if (helpDeleteSecs > 0 && helpMsg && helpMsg.message_id) {
+        setTimeout(async () => {
+          try {
+            await bot.deleteMessage(helpMsg.message_id, enrichedData.channel_id);
+          } catch (err) {
+            console.error('[help] Failed to delete help message:', err.message);
+          }
+        }, helpDeleteSecs * 1000);
+      }
       break;
 
     default: {

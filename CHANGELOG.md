@@ -4,6 +4,38 @@ All notable changes to Haven Bot are documented here.
 
 ---
 
+## [1.3.2] — 2026-05-31
+
+### Fixed
+- **Duplicate command responses** — `_getCommandHandler` in `bot.js` was firing after the `command` event emit, causing every command to execute twice. Removed the redundant handler calls since `index.js` owns all routing via the event system.
+- **`reqToken is not defined`** — legacy `message` event handler referenced `reqToken` which was only defined in the `slash_command` block. Removed the unnecessary `registerChannel` call since channels are pre-registered from env at startup.
+- **Channel routing timing** — `enrichedData` and `channelBot` were defined after the XP/achievement block that used them, causing `channel_id` to be undefined for level-up and achievement announcements. Moved both definitions before the XP block.
+- **Pre-registration timing** — `preRegisterFromEnv()` was called in `main()` after the callback server started, allowing callbacks to arrive before the channel map was populated. Moved to the `ChannelManager` constructor so the map is always ready before anything else runs.
+- **Pre-registered channels being overwritten** — runtime `registerChannel()` calls could overwrite the pre-registered map with incorrect token associations. Fixed to respect existing entries.
+
+### Added
+- **`/help` auto-delete** — configurable via `HELP_DELETE_SECONDS` env var. Set to a number of seconds to automatically delete the help message after it's read (e.g. `HELP_DELETE_SECONDS=60`). Default `0` = never delete. Keeps channels clean without needing manual deletion.
+- **`WEBHOOK_TOKENS` new format** — `ChannelName:ChannelCode:Token` combines all three channel identifiers in one entry, eliminating the need for a separate `WEBHOOK_CHANNEL_CODES` env var and preventing order-mismatch bugs.
+- **Warning log** — when the channel manager falls back to the primary token (channel not in map), a warning is now logged to make routing issues easier to diagnose.
+- **Stack trace logging** — null token errors now include a stack trace to identify which call is missing channel context.
+
+### Changed
+- `WEBHOOK_TOKENS` format updated from `Token:ChannelName` to `ChannelName:ChannelCode:Token` — old format still supported for backward compatibility
+- `preRegisterFromEnv()` removed from `main()` startup sequence — now runs automatically in `ChannelManager` constructor
+- `/cb/<n>` callback paths use short numeric index instead of full 64-character token to avoid URL length issues in Haven's UI
+
+### Notes
+- **Haven 3.19.0** — the Haven server bug where all slash commands were routed through whichever bot's callback URL was saved most recently has been fixed. Each channel's bot now correctly uses its own callback URL. Update Haven to 3.19.0 to take advantage of this fix.
+
+---
+
+## [1.3.1] — 2026-05-31
+
+### Fixed
+- `.env.example` `WEBHOOK_TOKENS` example showed old `token:ChannelName` format instead of new `ChannelName:ChannelCode:Token` format
+
+---
+
 ## [1.3.0] — 2026-05-31
 
 ### Added

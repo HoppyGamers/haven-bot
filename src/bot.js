@@ -373,9 +373,8 @@ class HavenBot extends EventEmitter {
             };
 
             // Register channel association for legacy events too
-            if (data.channelId && reqToken) {
-              this.channelManager.registerChannel(data.channelId, reqToken);
-            }
+            // reqToken not available here — channel already pre-registered from env
+            // so no action needed
             this._log('Command received (legacy):', commandData);
             this.emit('command', commandData);
             // All command routing handled by index.js via the 'command' event
