@@ -8,6 +8,7 @@ const { customCommands: customCommandsDb, rssFeeds } = require('./database');
 const calendarCommands = require('./commands/calendar');
 const rssCommands      = require('./commands/rss');
 const { startRssPoller } = require('./rss');
+const channelManager     = require('./channels');
 const { startNotifier }  = require('./notifier');
 const { checkAchievements, formatUnlockAnnouncement, getGlobalRank, getTotalMessages } = require('./achievements');
 const { db } = require('./database');
@@ -35,6 +36,26 @@ bot.on('command', async (data) => {
   const { command, user } = data;
   console.log(`\n📩 Command received: /${command} by ${user}`);
 
+  // Build enrichedData and channelBot FIRST so they're available to XP/achievement block
+  const enrichedData = {
+    ...data,
+    args: data.args && data.args.length > 0
+      ? data.args
+      : (data.raw_content || '').trim().split(/\s+/).slice(1).filter(Boolean),
+  };
+
+  const channelBot = new Proxy(bot, {
+    get(target, prop) {
+      if (prop === 'sendMessage') {
+        return (content, options = {}) => target.sendMessage(content, enrichedData.channel_id, options);
+      }
+      if (prop === 'playSound') {
+        return (soundName) => target.playSound(soundName, enrichedData.channel_id);
+      }
+      return target[prop];
+    }
+  });
+
   // Award XP and check achievements
   // FIX #1: skip XP for moderation/admin/daily commands (daily handles its own)
   // FIX #2: skip achievement checks for commands that can't change rank/messages
@@ -52,7 +73,7 @@ bot.on('command', async (data) => {
       const defaultGreeting = `👋 Welcome to the server, **${user}**! Type \`/help\` to see what I can do.`;
       const greeting = (process.env.BOT_FIRST_TIME_GREETING || defaultGreeting)
         .replace(/\{user\}/gi, user);
-      await bot.sendMessage(greeting);
+      await bot.sendMessage(greeting, data.channel_id || enrichedData.channel_id);
     }
 
     if (!skipXp && !isOnXpCooldown(userId)) {
@@ -61,7 +82,8 @@ bot.on('command', async (data) => {
       // FIX 7: announce level up mid-conversation
       if (xpResult && xpResult.leveledUp) {
         await bot.sendMessage(
-          `🎉 **Level Up!** **${user}** reached level ${xpResult.newLevel}!`
+          `🎉 **Level Up!** **${user}** reached level ${xpResult.newLevel}!`,
+          enrichedData.channel_id
         );
       }
     }
@@ -80,146 +102,139 @@ bot.on('command', async (data) => {
 
       if (unlocked.length > 0) {
         const announcement = formatUnlockAnnouncement(user, unlocked);
-        await bot.sendMessage(announcement);
+        await bot.sendMessage(announcement, enrichedData.channel_id);
       }
     }
   } catch (err) {
     console.error('Error tracking XP/achievements:', err.message);
   }
 
-  // args is pre-parsed by bot.js from Haven's slash_command payload.
-  // Fall back to parsing raw_content for legacy message events.
-  const enrichedData = {
-    ...data,
-    args: data.args && data.args.length > 0
-      ? data.args
-      : (data.raw_content || '').trim().split(/\s+/).slice(1).filter(Boolean),
-  };
+  // enrichedData and channelBot defined above before XP block
 
   try {
   switch (command) {
     // --- Profile commands ---
     case 'ping':
-      await bot.sendMessage(`🏓 Pong! ${user} just pinged me!`);
+      await channelBot.sendMessage(`🏓 Pong! ${user} just pinged me!`);
       break;
 
     case 'profile':
-      await bot.advancedCommands.profile(bot, enrichedData);
+      await channelBot.advancedCommands.profile(channelBot, enrichedData);
       break;
 
     case 'level':
-      await bot.advancedCommands.level(bot, enrichedData);
+      await channelBot.advancedCommands.level(channelBot, enrichedData);
       break;
 
     case 'stats':
-      await bot.advancedCommands.stats(bot, enrichedData);
+      await channelBot.advancedCommands.stats(channelBot, enrichedData);
       break;
 
     case 'leaderboard':
-      await bot.advancedCommands.leaderboard(bot, enrichedData);
+      await channelBot.advancedCommands.leaderboard(channelBot, enrichedData);
       break;
 
     case 'daily':
-      await bot.advancedCommands.daily(bot, enrichedData);
+      await channelBot.advancedCommands.daily(channelBot, enrichedData);
       break;
 
     case 'top':
-      await bot.advancedCommands.top(bot, enrichedData);
+      await channelBot.advancedCommands.top(channelBot, enrichedData);
       break;
 
     // --- Moderation commands ---
     case 'addadmin':
-      await moderationCommands.addadmin(bot, enrichedData);
+      await moderationCommands.addadmin(channelBot, enrichedData);
       break;
 
     case 'admins':
-      await moderationCommands.listAdmins(bot, enrichedData);
+      await moderationCommands.listAdmins(channelBot, enrichedData);
       break;
 
     case 'removeadmin':
-      await moderationCommands.removeadmin(bot, enrichedData);
+      await moderationCommands.removeadmin(channelBot, enrichedData);
       break;
 
     case 'ban':
-      await moderationCommands.ban(bot, enrichedData);
+      await moderationCommands.ban(channelBot, enrichedData);
       break;
 
     case 'kick':
-      await moderationCommands.kick(bot, enrichedData);
+      await moderationCommands.kick(channelBot, enrichedData);
       break;
 
     case 'warn':
-      await moderationCommands.warn(bot, enrichedData);
+      await moderationCommands.warn(channelBot, enrichedData);
       break;
 
     case 'mute':
-      await moderationCommands.mute(bot, enrichedData);
+      await moderationCommands.mute(channelBot, enrichedData);
       break;
 
     case 'unmute':
-      await moderationCommands.unmute(bot, enrichedData);
+      await moderationCommands.unmute(channelBot, enrichedData);
       break;
 
     case 'unban':
-      await moderationCommands.unban(bot, enrichedData);
+      await moderationCommands.unban(channelBot, enrichedData);
       break;
 
     case 'warnings':
-      await moderationCommands.getWarnings(bot, enrichedData);
+      await moderationCommands.getWarnings(channelBot, enrichedData);
       break;
 
     case 'modlog':
-      await moderationCommands.modlog(bot, enrichedData);
+      await moderationCommands.modlog(channelBot, enrichedData);
       break;
 
     // --- Music / Soundboard ---
     case 'soundboard':
-      await soundboardCommands.soundboard(bot, enrichedData);
+      await soundboardCommands.soundboard(channelBot, enrichedData);
       break;
 
     case 'sounds':
-      await soundboardCommands.sounds(bot, enrichedData);
+      await soundboardCommands.sounds(channelBot, enrichedData);
       break;
 
     case 'stopsound':
-      await soundboardCommands.stopsound(bot, enrichedData);
+      await soundboardCommands.stopsound(channelBot, enrichedData);
       break;
 
     // --- Custom command management ---
     case 'addcommand':
-      await customCommands.addcommand(bot, enrichedData);
+      await customCommands.addcommand(channelBot, enrichedData);
       break;
 
     case 'editcommand':
-      await customCommands.editcommand(bot, enrichedData);
+      await customCommands.editcommand(channelBot, enrichedData);
       break;
 
     case 'removecommand':
-      await customCommands.removecommand(bot, enrichedData);
+      await customCommands.removecommand(channelBot, enrichedData);
       break;
 
     case 'commands':
     case 'customcommands':
-      await customCommands.listCommands(bot, enrichedData);
+      await customCommands.listCommands(channelBot, enrichedData);
       break;
 
     // --- Calendar ---
     case 'calendar':
-      await calendarCommands.calendarRouter(bot, enrichedData);
+      await calendarCommands.calendarRouter(channelBot, enrichedData);
       break;
 
     case 'rsvp':
-      await calendarCommands.rsvp(bot, enrichedData);
+      await calendarCommands.rsvp(channelBot, enrichedData);
       break;
 
     // --- RSS ---
     case 'rss':
-      await rssCommands.rssRouter(bot, enrichedData);
+      await rssCommands.rssRouter(channelBot, enrichedData);
       break;
 
     // --- Help ---
     case 'help':
-      await bot.sendMessage(`
+      await channelBot.sendMessage(`
 🤖 **Haven Bot Help**
 
 **User Profile:**
@@ -273,9 +288,9 @@ bot.on('command', async (data) => {
       // Check if it's a custom command before reporting unknown
       const customCmd = customCommandsDb.get(command);
       if (customCmd) {
-        await customCommands.executeCustomCommand(bot, enrichedData, customCmd);
+        await customCommands.executeCustomCommand(channelBot, enrichedData, customCmd);
       } else {
-        await bot.sendMessage(
+        await channelBot.sendMessage(
           `❓ Unknown command: \`/${command}\`. Type \`/help\` for available commands.`
         );
       }
@@ -285,7 +300,7 @@ bot.on('command', async (data) => {
     // Log the full error so it's visible in the console, but don't crash
     console.error(`❌ Error handling /${command}:`, err);
     try {
-      await bot.sendMessage(
+      await channelBot.sendMessage(
         `⚠️ **Internal Error**\nSomething went wrong running \`/${command}\`. The error has been logged.`
       );
     } catch {
@@ -357,25 +372,70 @@ async function main() {
     { command: 'help',       description: 'Show all available commands' },
   ];
 
-  console.log('📋 Registering slash commands with Haven...');
-  for (const { command, description } of commandList) {
-    try {
-      await bot.registerCommand(command, description);
-    } catch (err) {
-      console.error(`   ⚠️  Failed to register /${command}:`, err.message);
+  // Register commands on every configured channel token
+  // Pace registrations to avoid hitting Haven's 30 req/min rate limit
+  const allTokens = channelManager.getAllTokens();
+  const RATE_LIMIT  = 25;          // stay under 30/min with headroom
+  const DELAY_MS    = 61000;       // wait just over 1 minute before next batch
+  const CMD_GAP_MS  = 100;         // small gap between individual commands
+
+  console.log(`📋 Registering slash commands on ${allTokens.length} channel(s)...`);
+
+  let requestCount = 0;
+
+  for (const { token, channelName } of allTokens) {
+    console.log(`   → ${channelName} (callback: ${channelManager.getCallbackUrl(token) || 'none'})`);
+
+    for (const { command, description } of commandList) {
+      // If approaching rate limit, pause until window resets
+      if (requestCount > 0 && requestCount % RATE_LIMIT === 0) {
+        console.log(`   ⏳ Rate limit pause — waiting ${DELAY_MS / 1000}s...`);
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
+
+      try {
+        await bot.registerCommand(command, description, token);
+        requestCount++;
+        // Small gap between commands to smooth out the request rate
+        await new Promise(r => setTimeout(r, CMD_GAP_MS));
+      } catch (err) {
+        console.error(`   ⚠️  Failed to register /${command} on ${channelName}:`, err.message);
+      }
     }
   }
-  console.log(`✅ Registered ${commandList.length} commands`);
+  console.log(`✅ Registered ${commandList.length} commands on ${allTokens.length} channel(s)`);
 
-  // FIX 13: configurable startup greeting via BOT_GREETING env var
+  // Update each webhook's callback URL in Haven to use the per-token path
+  // This ensures Haven POSTs to /cb/<token> so we can identify the source channel
+  if (allTokens.length > 1 && process.env.CALLBACK_URL) {
+    console.log('🔗 Updating webhook callback URLs in Haven...');
+    for (const { token, channelName } of allTokens) {
+      const callbackUrl = channelManager.getCallbackUrl(token);
+      try {
+        await bot._safeRequest('PATCH', `/api/webhooks/${token}`, {
+          callback_url: callbackUrl,
+        });
+        console.log(`   ✅ ${channelName} → ${callbackUrl}`);
+      } catch (err) {
+        // PATCH may not be supported — log but continue
+        console.log(`   ℹ️  ${channelName}: could not auto-update callback URL (${err.message})`);
+        console.log(`      Set manually in Haven Bot Management: ${callbackUrl}`);
+      }
+    }
+  }
+
+  // Send startup greeting to all configured channels
   const greeting = process.env.BOT_GREETING ||
     `👋 **Haven Bot is online!**\n\nType \`/help\` to see what I can do.`;
 
-  try {
-    await bot.sendMessage(greeting);
-  } catch (err) {
-    console.error('Failed to send welcome message:', err.message);
-    console.log('(Expected if the bot is not yet fully configured.)');
+  for (const { token, channelName } of channelManager.getAllTokens()) {
+    // Derive channelCode from registered map or skip — will populate on first command
+    // For startup we send directly via token
+    try {
+      await bot._safeRequest('POST', `/api/webhooks/${token}/`, { content: greeting });
+    } catch (err) {
+      console.error(`Failed to send welcome to ${channelName}:`, err.message);
+    }
   }
 
   process.on('SIGINT',  () => { console.log('\n👋 Shutting down...'); bot.destroy(); process.exit(0); });

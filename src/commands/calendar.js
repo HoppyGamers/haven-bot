@@ -181,20 +181,43 @@ async function calendarAdd(bot, data) {
 }
 
 // ---------------------------------------------------------------------------
-// /calendar list
+// /calendar list [all]
+// Without arg: events for this channel only
+// With "all": all events across all channels (admin only)
 // ---------------------------------------------------------------------------
 async function calendarList(bot, data) {
-  const events = calendar.getUpcoming(10);
+  const { user_id: userId, channel_id: channelId } = data;
+  const isAll = (data.args || []).join(' ').toLowerCase().trim() === 'all';
 
-  if (events.length === 0) {
-    return bot.sendMessage(`📅 **Upcoming Events**\n\nNo events scheduled. Admins can use \`/calendar add\` to create one.`);
+  let events;
+  let title;
+
+  if (isAll) {
+    if (!admins.isAdmin(userId.toString())) {
+      return bot.sendMessage(`❌ **Permission Denied**\n\`/calendar list all\` is admin only.`);
+    }
+    events = calendar.getUpcoming(25);
+    title  = `📅 **All Upcoming Events (${events.length})**`;
+  } else {
+    events = calendar.getUpcomingForChannel(channelId, 10);
+    title  = `📅 **Upcoming Events (${events.length})**`;
   }
 
-  let message = `📅 **Upcoming Events (${events.length})**\n\n`;
+  if (events.length === 0) {
+    const hint = isAll
+      ? `No events scheduled on any channel.`
+      : `No events scheduled here. Admins can use \`/calendar add\` to create one.`;
+    return bot.sendMessage(`📅 **Upcoming Events**\n\n${hint}`);
+  }
+
+  let message = `${title}\n\n`;
   for (const ev of events) {
     const rsvps = calendar.getRsvps(ev.id);
     message += `**[${ev.id}] ${ev.title}**\n`;
     message += `🕐 ${formatEventTime(ev.event_time)}\n`;
+    if (isAll && ev.channel_id) {
+      message += `📌 Channel: ${ev.channel_id}\n`;
+    }
     message += `✅ ${rsvps.length} attending  •  \`/rsvp ${ev.id}\` to join\n\n`;
   }
 

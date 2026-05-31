@@ -67,71 +67,48 @@ module.exports = {
     );
   },
 
-  // /leaderboard [global]
-  // Without arg: shows channel leaderboard
-  // With "global" arg: shows global leaderboard (replaces /top)
+  // /leaderboard — global XP leaderboard
   leaderboard: async (bot, data) => {
     const channelId = data.channel_id;
-    const isGlobal  = (data.args || []).join(' ').toLowerCase().trim() === 'global';
-
     channels.getOrCreate(channelId, 'Channel');
 
+    const leaderboard = stats.getChannelLeaderboard(channelId, 10);
     const medals = ['🥇', '🥈', '🥉'];
 
-    if (isGlobal) {
-      const leaderboard = users.getLeaderboard(10);
-
-      if (leaderboard.length === 0) {
-        await bot.sendMessage(`🌟 **Global Leaderboard**\n\nNo users yet!`);
-        return;
-      }
-
-      let message = `🌟 **Global Leaderboard (Top ${leaderboard.length})**\n\n`;
-      leaderboard.forEach((entry, index) => {
-        const prefix = medals[index] || `${index + 1}.`;
-        message += `${prefix} **${entry.username}** — Level ${entry.level} (${entry.xp} XP)\n`;
-      });
-      message += `\nUse \`/leaderboard\` to see the channel leaderboard.`;
-      await bot.sendMessage(message);
-    } else {
-      const leaderboard = stats.getChannelLeaderboard(channelId, 10);
-
-      if (leaderboard.length === 0) {
-        await bot.sendMessage(`🏆 **Channel Leaderboard**\n\nNo users yet!`);
-        return;
-      }
-
-      let message = `🏆 **Channel Leaderboard (Top ${leaderboard.length})**\n\n`;
-      leaderboard.forEach((entry, index) => {
-        const prefix = medals[index] || `${index + 1}.`;
-        message += `${prefix} **${entry.username}** — Level ${entry.level} (${entry.xp} XP)\n`;
-      });
-      message += `\nUse \`/leaderboard global\` to see the global leaderboard.`;
-      await bot.sendMessage(message);
+    if (leaderboard.length === 0) {
+      await bot.sendMessage(`🏆 **Global Leaderboard**\n\nNo users yet!`);
+      return;
     }
+
+    let message = `🏆 **Global Leaderboard (Top ${leaderboard.length})**\n\n`;
+    leaderboard.forEach((entry, index) => {
+      const prefix = medals[index] || `${index + 1}.`;
+      message += `${prefix} **${entry.username}** — Level ${entry.level} (${entry.xp} XP)\n`;
+    });
+
+    await bot.sendMessage(message);
   },
 
-  // /level
+  // /level — global level
   level: async (bot, data) => {
     const userId    = data.user_id.toString();
     const username  = data.user;
     const channelId = data.channel_id;
 
-    users.getOrCreate(userId, username);
+    const user     = users.getOrCreate(userId, username);
     channels.getOrCreate(channelId, 'Channel');
-    const userStats = stats.getOrCreate(userId, channelId);
-    const xpToNext  = (userStats.level * 100) - userStats.xp;
+    const totalMsg = getTotalMessages(db, userId);
+    const xpToNext = (user.level * 100) - user.xp;
 
     await bot.sendMessage(
       `📊 **${username}'s Level**\n\n` +
-      `Level: ${userStats.level}\n` +
-      `Channel XP: ${userStats.xp}\n` +
-      `XP to next level: ${xpToNext}\n` +
-      `Messages: ${userStats.messages}`
+      `Level: ${user.level}\n` +
+      `XP: ${user.xp}  •  Next level: ${xpToNext} XP\n` +
+      `Total Messages: ${totalMsg}`
     );
   },
 
-  // /stats
+  // /stats — global XP with channel message breakdown
   stats: async (bot, data) => {
     const userId    = data.user_id.toString();
     const username  = data.user;
@@ -139,31 +116,32 @@ module.exports = {
 
     const user = users.getOrCreate(userId, username);
     channels.getOrCreate(channelId, 'Channel');
-    const userStats = stats.getOrCreate(userId, channelId);
 
     const { rank, total } = stats.getChannelRank(userId, channelId);
     const totalMessages   = getTotalMessages(db, userId);
-    const globalRank      = getGlobalRank(db, userId);
     const totalUsers      = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
 
-    // FIX 8: include achievement count in stats
     const earnedAchievements = db.prepare(
       'SELECT COUNT(*) as count FROM user_achievements WHERE user_id = ?'
     ).get(userId);
-    const achievementCount  = earnedAchievements ? earnedAchievements.count : 0;
-    const achievementTotal  = db.prepare('SELECT COUNT(*) as count FROM achievements').get().count;
+    const achievementCount = earnedAchievements ? earnedAchievements.count : 0;
+    const achievementTotal = db.prepare('SELECT COUNT(*) as count FROM achievements').get().count;
+
+    // Channel breakdown
+    const breakdown = stats.getChannelBreakdown(userId);
+    const breakdownLines = breakdown.length > 0
+      ? breakdown.map(r => `• #${r.channel_name}: ${r.messages} messages`).join('\n')
+      : '• No messages yet';
 
     await bot.sendMessage(
       `📈 **${username}'s Statistics**\n\n` +
       `**Global:**\n` +
       `• Level: ${user.level}  •  XP: ${user.xp}\n` +
-      `• Global Rank: #${globalRank} of ${totalUsers}\n` +
+      `• Rank: #${rank} of ${totalUsers}\n` +
       `• Total Messages: ${totalMessages}\n` +
       `• Achievements: ${achievementCount}/${achievementTotal}\n\n` +
-      `**This Channel:**\n` +
-      `• Level: ${userStats.level}  •  XP: ${userStats.xp}\n` +
-      `• Messages: ${userStats.messages}\n` +
-      `• Channel Rank: #${rank} of ${total}`
+      `**Channel Breakdown:**\n` +
+      breakdownLines
     );
   },
 

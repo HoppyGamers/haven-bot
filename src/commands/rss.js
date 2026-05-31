@@ -54,7 +54,7 @@ async function rssAdd(bot, data) {
     );
   }
 
-  const result = rssFeeds.add(url, user, filter || null);
+  const result = rssFeeds.add(url, user, filter || null, data.channel_id);
   if (!result) {
     return bot.sendMessage(`⚠️ **Already Added**\nThis feed is already being monitored.`);
   }

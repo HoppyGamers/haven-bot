@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 const { calendar } = require('./database');
+const channelManager = require('./channels');
 
 /**
  * Format a UTC ISO string for display in the server timezone.
@@ -54,7 +55,8 @@ function startNotifier(bot, intervalMs = 60000) {
       for (const notification of pending) {
         try {
           const message = buildReminderMessage(notification);
-          await bot.sendMessage(message);
+          // Send to the channel the event was created in
+          await bot.sendMessage(message, notification.channel_id);
           calendar.markNotificationSent(notification.id);
           console.log(`✅ Notification sent for event ${notification.event_id} (${notification.title})`);
         } catch (err) {

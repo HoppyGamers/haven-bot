@@ -3,6 +3,7 @@ const https = require('https');
 const http = require('http');
 const { EventEmitter } = require('events');
 const { initializeDatabase, users, stats, channels } = require('./database');
+const channelManager = require('./channels');
 
 class HavenBot extends EventEmitter {
   constructor(config = {}) {
@@ -15,6 +16,7 @@ class HavenBot extends EventEmitter {
     this.botName = config.botName || process.env.BOT_NAME || 'HavenBot';
     this.botAvatar = config.botAvatar || process.env.BOT_AVATAR_URL || null;
     this.debug = (process.env.DEBUG || 'false').toLowerCase() === 'true';
+    this.channelManager = channelManager;
     
     this.rateLimitQueue = [];
     this.rateLimitInterval = null;
@@ -158,41 +160,51 @@ class HavenBot extends EventEmitter {
   
   // --- Message Methods ---
   
-  async sendMessage(content, options = {}) {
+  async sendMessage(content, channelCode = null, options = {}) {
     if (!content || typeof content !== 'string') {
       throw new Error('Content is required and must be a string');
     }
-    
+
     if (content.length > 4000) {
-      throw new Error('Message content exceeds 4000 character limit');
+      // Truncate gracefully rather than throwing
+      content = content.slice(0, 3997) + '...';
     }
-    
-    const body = {
-      content,
-    };
-    
-    if (options.username) body.username = options.username;
+
+    // Use channel-specific token if provided, otherwise primary token
+    const token = channelCode
+      ? this.channelManager.getToken(channelCode)
+      : this.token;
+
+    if (!token) {
+      console.error(`[sendMessage] No token found for channelCode: ${channelCode} — registered channels:`, [...this.channelManager.tokenByCode.entries()]);
+      console.error(`[sendMessage] Stack:`, new Error().stack.split('\n').slice(1,5).join('\n'));
+      throw new Error(`No token for channel ${channelCode}`);
+    }
+
+    const body = { content };
+    if (options.username)   body.username   = options.username;
     if (options.avatar_url) body.avatar_url = options.avatar_url;
-    
-    const res = await this._safeRequest('POST', `/api/webhooks/${this.token}/`, body);
+
+    const res = await this._safeRequest('POST', `/api/webhooks/${token}/`, body);
     this._log('Message sent:', res);
     return res;
   }
   
-  async deleteMessage(messageId) {
-    const res = await this._safeRequest('DELETE', `/api/webhooks/${this.token}/messages/${messageId}`);
+  async deleteMessage(messageId, channelCode = null) {
+    const token = channelCode ? this.channelManager.getToken(channelCode) : this.token;
+    const res = await this._safeRequest('DELETE', `/api/webhooks/${token}/messages/${messageId}`);
     this._log('Message deleted:', messageId);
     return res;
   }
   
   // --- Soundboard Methods ---
   
-  async playSound(soundName) {
+  async playSound(soundName, channelCode = null) {
     if (!soundName) {
       throw new Error('Sound name is required');
     }
-    
-    const res = await this._safeRequest('POST', `/api/webhooks/${this.token}/sounds`, {
+    const token = channelCode ? this.channelManager.getToken(channelCode) : this.token;
+    const res = await this._safeRequest('POST', `/api/webhooks/${token}/sounds`, {
       sound: soundName,
     });
     this._log('Sound played:', soundName);
@@ -207,12 +219,12 @@ class HavenBot extends EventEmitter {
   
   // --- Slash Command Methods ---
   
-  async registerCommand(command, description) {
+  async registerCommand(command, description, token = null) {
     if (!command || !description) {
       throw new Error('Command name and description are required');
     }
-    
-    const res = await this._safeRequest('POST', `/api/webhooks/${this.token}/commands`, {
+    const useToken = token || this.token;
+    const res = await this._safeRequest('POST', `/api/webhooks/${useToken}/commands`, {
       command,
       description,
     });
@@ -260,7 +272,7 @@ class HavenBot extends EventEmitter {
   
   createCallbackServer(port = process.env.PORT || 3000) {
     const server = http.createServer(async (req, res) => {
-      // Health check endpoint for Docker and monitoring
+      // Health check endpoint
       if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
@@ -271,6 +283,18 @@ class HavenBot extends EventEmitter {
         res.writeHead(405);
         res.end('Method not allowed');
         return;
+      }
+
+      // Extract token from path if using per-channel callback URLs
+      // Path: /cb/<n> → look up token by index
+      // Path: /       → legacy single-token mode
+      const urlParts = req.url.split('/').filter(Boolean);
+      let pathToken = null;
+      if (urlParts[0] === 'cb' && urlParts[1]) {
+        const idx = parseInt(urlParts[1]);
+        pathToken = !isNaN(idx)
+          ? this.channelManager.getTokenByIndex(idx)
+          : urlParts[1]; // fallback: treat as literal token
       }
       
       let body = '';
@@ -301,6 +325,14 @@ class HavenBot extends EventEmitter {
             const user    = data.author?.username || 'Unknown';
             const userId  = data.author?.id;
 
+            // Use per-token path if available (/cb/<token>), else fall back to primary
+            const reqToken = pathToken || this.token;
+
+            // Register channel→token association on first sight
+            if (data.channelCode && reqToken) {
+              this.channelManager.registerChannel(data.channelCode, reqToken);
+            }
+
             // Haven sends args as a space-separated string — split into array
             const argsRaw = (data.args || '').trim();
             const args    = argsRaw ? argsRaw.split(/\s+/) : [];
@@ -308,20 +340,17 @@ class HavenBot extends EventEmitter {
             const commandData = {
               command,
               user,
-              user_id:     userId,
-              channel_id:  data.channelCode,
-              timestamp:   data.timestamp || new Date().toISOString(),
+              user_id:      userId,
+              channel_id:   data.channelCode,
+              channel_name: this.channelManager.getChannelName(data.channelCode),
+              timestamp:    data.timestamp || new Date().toISOString(),
               args,
-              raw_content: `/${command}${argsRaw ? ' ' + argsRaw : ''}`,
+              raw_content:  `/${command}${argsRaw ? ' ' + argsRaw : ''}`,
             };
 
             this._log('Command received:', commandData);
             this.emit('command', commandData);
-
-            if (this.commands[command]) {
-              const handler = this._getCommandHandler(command);
-              if (handler) await handler(commandData);
-            }
+            // All command routing handled by index.js via the 'command' event
           }
 
           // Also handle legacy message events with slash commands (fallback)
@@ -343,13 +372,13 @@ class HavenBot extends EventEmitter {
               raw_content: data.message.content,
             };
 
+            // Register channel association for legacy events too
+            if (data.channelId && reqToken) {
+              this.channelManager.registerChannel(data.channelId, reqToken);
+            }
             this._log('Command received (legacy):', commandData);
             this.emit('command', commandData);
-
-            if (this.commands[command]) {
-              const handler = this._getCommandHandler(command);
-              if (handler) await handler(commandData);
-            }
+            // All command routing handled by index.js via the 'command' event
           }
           
           // Send success response
@@ -387,10 +416,12 @@ class HavenBot extends EventEmitter {
   // --- Initialization ---
   
   async init() {
+    const allTokens = this.channelManager.getAllTokens();
     console.log('🤖 Haven Bot initializing...');
     console.log(`   Server: ${this.serverUrl}`);
     console.log(`   Bot name: ${this.botName}`);
     console.log(`   Callback: ${this.callbackUrl || 'none'}`);
+    console.log(`   Channels: ${allTokens.length} (${allTokens.map(t => t.channelName).join(', ')})`);
     console.log(`   Debug: ${this.debug ? 'enabled' : 'disabled'}`);
     
     // index.js owns all command routing; bot.js only tracks ping internally

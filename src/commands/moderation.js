@@ -131,13 +131,14 @@ async function ban(bot, data) {
 
   if (banned) {
     return bot.sendMessage(
-      `🔨 **User Banned**\n**${targetUsername}** has been banned.\n**Reason:** ${reason}`
+      `🔨 **User Banned**\n**${targetUsername}** has been banned from the server.\n**Reason:** ${reason}`
     );
   } else {
     return bot.sendMessage(
-      `⚠️ **Ban Recorded (Action Failed)**\n` +
-      `**${targetUsername}** was logged as banned but the Haven API returned an error.\n` +
-      `**Reason:** ${reason}\n*Error: ${apiError}*`
+      `⚠️ **Ban Failed**\n` +
+      `Couldn't ban **${targetUsername}** via Haven API.\n` +
+      `**Reason:** ${reason}\n*Error: ${apiError}*\n\n` +
+      `*Tip: Make sure \`can_moderate\` is enabled on this bot in Haven's Bot Management settings.*`
     );
   }
 }
@@ -322,9 +323,10 @@ async function mute(bot, data) {
     );
   } else {
     return bot.sendMessage(
-      `⚠️ **Mute Recorded (Action Failed)**\n` +
-      `**${targetUsername}** was logged as muted but the Haven API returned an error.\n` +
-      `**Reason:** ${reason}\n*Error: ${muteApiError}*`
+      `⚠️ **Mute Failed**\n` +
+      `Couldn't mute **${targetUsername}** via Haven API.\n` +
+      `**Reason:** ${reason}\n*Error: ${muteApiError}*\n\n` +
+      `*Tip: Make sure \`can_moderate\` is enabled on this bot in Haven's Bot Management settings.*`
     );
   }
 }
@@ -368,8 +370,9 @@ async function unmute(bot, data) {
     return bot.sendMessage(`🔊 **User Unmuted**\n**${targetUsername}** has been unmuted.`);
   } else {
     return bot.sendMessage(
-      `⚠️ **Unmute Recorded (Action Failed)**\n` +
-      `**${targetUsername}** was logged as unmuted but the Haven API returned an error.\n*Error: ${unmuteApiError}*`
+      `⚠️ **Unmute Failed**\n` +
+      `Couldn't unmute **${targetUsername}** via Haven API.\n*Error: ${unmuteApiError}*\n\n` +
+      `*Tip: Make sure \`can_moderate\` is enabled on this bot in Haven's Bot Management settings.*`
     );
   }
 }
@@ -410,11 +413,12 @@ async function unban(bot, data) {
   modLogs.log(channelId, 'unban', targetUserId, username, 'Unbanned');
 
   if (unbanned) {
-    return bot.sendMessage(`✅ **User Unbanned**\n**${targetUsername}** has been unbanned.`);
+    return bot.sendMessage(`✅ **User Unbanned**\n**${targetUsername}** has been unbanned from the server.`);
   } else {
     return bot.sendMessage(
-      `⚠️ **Unban Recorded (Action Failed)**\n` +
-      `**${targetUsername}** was logged as unbanned but the Haven API returned an error.\n*Error: ${unbanApiError}*`
+      `⚠️ **Unban Failed**\n` +
+      `Couldn't unban **${targetUsername}** via Haven API.\n*Error: ${unbanApiError}*\n\n` +
+      `*Tip: Make sure \`can_moderate\` is enabled on this bot in Haven's Bot Management settings.*`
     );
   }
 }

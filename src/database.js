@@ -206,6 +206,7 @@ function initializeDatabase() {
       filter TEXT,
       active BOOLEAN DEFAULT 1,
       added_by TEXT NOT NULL,
+      channel_id TEXT,
       last_checked DATETIME,
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -226,6 +227,7 @@ function initializeDatabase() {
     // Migrations: safely add columns to existing databases
   const migrations = [
     'ALTER TABLE users ADD COLUMN last_daily_claim DATETIME',
+    'ALTER TABLE rss_feeds ADD COLUMN channel_id TEXT',
     'ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0',
     'ALTER TABLE mod_logs ADD COLUMN duration_minutes INTEGER',
   ];
@@ -370,48 +372,64 @@ const stats = {
     return stat;
   },
 
-  // FIX #1: recalculate and persist level after XP is added
+  // XP is global — awarded to users table. user_stats tracks message counts only.
   addMessage(userId, channelId, xpAmount = 5) {
     this.getOrCreate(userId, channelId);
-    db.prepare(
-      'UPDATE user_stats SET messages = messages + 1, xp = xp + ?, last_xp_time = CURRENT_TIMESTAMP WHERE user_id = ? AND channel_id = ?'
-    ).run(xpAmount, userId, channelId);
 
-    const stat = db.prepare('SELECT xp, level FROM user_stats WHERE user_id = ? AND channel_id = ?').get(userId, channelId);
-    const newLevel = Math.floor(stat.xp / 100) + 1;
-    if (newLevel !== stat.level) {
-      db.prepare('UPDATE user_stats SET level = ? WHERE user_id = ? AND channel_id = ?').run(newLevel, userId, channelId);
+    // Increment per-channel message count (secondary stat)
+    db.prepare(
+      'UPDATE user_stats SET messages = messages + 1, last_xp_time = CURRENT_TIMESTAMP WHERE user_id = ? AND channel_id = ?'
+    ).run(userId, channelId);
+
+    // Award XP globally
+    db.prepare(
+      'UPDATE users SET xp = xp + ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?'
+    ).run(xpAmount, userId);
+
+    // Recalculate global level
+    const user = db.prepare('SELECT xp, level FROM users WHERE user_id = ?').get(userId);
+    const newLevel = Math.floor(user.xp / 100) + 1;
+    if (newLevel !== user.level) {
+      db.prepare('UPDATE users SET level = ? WHERE user_id = ?').run(newLevel, userId);
       return { leveledUp: true, newLevel };
     }
     return { leveledUp: false };
   },
 
+  // Global leaderboard — XP is now server-wide
   getChannelLeaderboard(channelId, limit = 10) {
     return db.prepare(`
-      SELECT user_stats.user_id, users.username, user_stats.messages, user_stats.xp, user_stats.level
-      FROM user_stats
-      JOIN users ON user_stats.user_id = users.user_id
-      WHERE user_stats.channel_id = ?
-      ORDER BY user_stats.xp DESC
+      SELECT user_id, username, xp, level
+      FROM users
+      ORDER BY xp DESC
       LIMIT ?
-    `).all(channelId, limit);
+    `).all(limit);
   },
 
-  // FIX #2: return total count for accurate rank display
+  // Global rank by XP
   getChannelRank(userId, channelId) {
     const rank = db.prepare(`
-      SELECT COUNT(*) + 1 as rank
-      FROM user_stats
-      WHERE channel_id = ? AND xp > (
-        SELECT COALESCE(xp, 0) FROM user_stats WHERE user_id = ? AND channel_id = ?
-      )
-    `).get(channelId, userId, channelId);
-    const total = db.prepare('SELECT COUNT(*) as count FROM user_stats WHERE channel_id = ?').get(channelId);
+      SELECT COUNT(*) + 1 as rank FROM users
+      WHERE xp > (SELECT COALESCE(xp, 0) FROM users WHERE user_id = ?)
+    `).get(userId);
+    const total = db.prepare('SELECT COUNT(*) as count FROM users').get();
     return { rank: rank ? rank.rank : 1, total: total.count };
   },
 
   getUserStats(userId, channelId) {
     return db.prepare('SELECT * FROM user_stats WHERE user_id = ? AND channel_id = ?').get(userId, channelId);
+  },
+
+  // Get message counts across all channels for a user
+  getChannelBreakdown(userId) {
+    return db.prepare(`
+      SELECT us.channel_id, us.messages,
+             COALESCE(c.channel_name, us.channel_id) as channel_name
+      FROM user_stats us
+      LEFT JOIN channels c ON us.channel_id = c.channel_id
+      WHERE us.user_id = ? AND us.messages > 0
+      ORDER BY us.messages DESC
+    `).all(userId);
   },
 };
 
@@ -633,6 +651,12 @@ const calendar = {
     ).all(limit);
   },
 
+  getUpcomingForChannel(channelId, limit = 10) {
+    return db.prepare(
+      'SELECT * FROM events WHERE channel_id = ? AND event_time > CURRENT_TIMESTAMP ORDER BY event_time ASC LIMIT ?'
+    ).all(channelId, limit);
+  },
+
   updateEvent(eventId, fields) {
     const allowed = ['title', 'event_time'];
     const sets = Object.keys(fields)
@@ -704,11 +728,11 @@ const calendar = {
 // RSS feed operations
 // ---------------------------------------------------------------------------
 const rssFeeds = {
-  add(url, addedBy, filter = null) {
+  add(url, addedBy, filter = null, channelId = null) {
     try {
       return db.prepare(
-        'INSERT INTO rss_feeds (url, added_by, filter) VALUES (?, ?, ?)'
-      ).run(url, addedBy, filter);
+        'INSERT INTO rss_feeds (url, added_by, filter, channel_id) VALUES (?, ?, ?, ?)'
+      ).run(url, addedBy, filter, channelId);
     } catch (err) {
       if (err.message.includes('UNIQUE constraint')) return null;
       throw err;

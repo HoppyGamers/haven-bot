@@ -157,7 +157,7 @@ async function checkFeeds(bot, rssFeeds) {
 
       for (const item of toPost) {
         try {
-          await bot.sendMessage(formatItem(displayTitle, item));
+          await bot.sendMessage(formatItem(displayTitle, item), feed.channel_id);
           rssFeeds.markSeen(feed.id, item.guid);
         } catch (err) {
           console.error(`[RSS] Failed to post item from feed ${feed.id}:`, err.message);
@@ -166,7 +166,8 @@ async function checkFeeds(bot, rssFeeds) {
 
       if (newItems.length > maxItems) {
         await bot.sendMessage(
-          `📰 **${displayTitle}** — ${newItems.length - maxItems} more new item${newItems.length - maxItems !== 1 ? 's' : ''} skipped to avoid flooding.`
+          `📰 **${displayTitle}** — ${newItems.length - maxItems} more new item${newItems.length - maxItems !== 1 ? 's' : ''} skipped to avoid flooding.`,
+          feed.channel_id
         );
       }
 
