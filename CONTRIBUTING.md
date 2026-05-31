@@ -40,7 +40,7 @@ Open an issue tagged `enhancement` with:
 ### Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/haven-bot.git
+git clone https://github.com/HoppyGamers/haven-bot.git
 cd haven-bot
 npm install
 cp .env.example .env

@@ -66,7 +66,7 @@ A feature-rich community bot for [Haven](https://github.com/ancsemi/Haven) voice
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/haven-bot.git
+git clone https://github.com/HoppyGamers/haven-bot.git
 cd haven-bot
 npm install
 ```
@@ -215,7 +215,7 @@ Duration format: `30m`, `2h`, `1d`
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/haven-bot.git
+git clone https://github.com/HoppyGamers/haven-bot.git
 cd haven-bot
 
 # Configure
