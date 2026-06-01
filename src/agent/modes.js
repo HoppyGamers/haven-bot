@@ -40,14 +40,19 @@ function shouldRespond(message, config) {
     }
 
     case 'passive': {
-      // Responds when message looks like a question the agent can answer,
-      // OR when the last agent message ended with a question (conversation reply context)
+      // Responds when:
+      // 1. Message scores above confidence threshold (question/F1 topic)
+      // 2. Agent name appears in message (direct address in passive mode)
+      // 3. Last agent message was a question (conversation reply context)
       const confidence = scoreMessage(content);
       const threshold  = config.confidence ?? 0.6;
       if (confidence >= threshold) return true;
 
-      // Check if Bob asked a question in recent conversation history — if so
-      // treat the next user message as a reply regardless of score
+      // Direct address — name mentioned in passive mode also triggers
+      const fullName = (config.agentName || 'Bob').toLowerCase();
+      if (content.toLowerCase().includes(fullName)) return true;
+
+      // Conversation reply context
       if (config._lastAgentMessageWasQuestion) return true;
 
       return false;
