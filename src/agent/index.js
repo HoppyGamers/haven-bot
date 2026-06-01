@@ -97,8 +97,19 @@ async function handleAgentCommand(bot, data) {
       : h.content,
   }));
 
-  // Send typing indicator — let user know something is happening
-  await bot.sendMessage(`_${config.agentName} is thinking..._`);
+  // Send thinking indicator and capture message_id so we can delete it after
+  const thinkingMsg = await bot.sendMessage(`_${config.agentName} is thinking..._`);
+  const thinkingId  = thinkingMsg?.message_id || null;
+
+  const deleteThinking = async () => {
+    if (thinkingId) {
+      try {
+        await bot.deleteMessage(thinkingId, channel_id);
+      } catch {
+        // Silent — not critical if delete fails
+      }
+    }
+  };
 
   try {
     const response = await chat({
@@ -107,6 +118,8 @@ async function handleAgentCommand(bot, data) {
       systemPrompt: config.systemPrompt,
       messages,
     });
+
+    await deleteThinking();
 
     if (!response || !response.trim()) {
       await bot.sendMessage(`❌ **${config.agentName}**: No response from model. Try again.`);
@@ -121,6 +134,7 @@ async function handleAgentCommand(bot, data) {
     await bot.sendMessage(`**${config.agentName}:** ${response}`);
 
   } catch (err) {
+    await deleteThinking();
     console.error(`[Agent] Error:`, err.message);
     await bot.sendMessage(
       `❌ **${config.agentName}** encountered an error: ${err.message}\n\n` +

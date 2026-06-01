@@ -53,6 +53,9 @@ bot.on('command', async (data) => {
       if (prop === 'sendMessage') {
         return (content, options = {}) => target.sendMessage(content, enrichedData.channel_id, options);
       }
+      if (prop === 'deleteMessage') {
+        return (messageId) => target.deleteMessage(messageId, enrichedData.channel_id);
+      }
       if (prop === 'playSound') {
         return (soundName) => target.playSound(soundName, enrichedData.channel_id);
       }
