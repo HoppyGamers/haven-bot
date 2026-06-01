@@ -448,11 +448,21 @@ async function main() {
   const greeting = process.env.BOT_GREETING ||
     `👋 **Haven Bot is online!**\n\nType \`/help\` to see what I can do.`;
 
+  const greetingDeleteSecs = parseInt(process.env.HELP_DELETE_SECONDS || '0', 10);
+
   for (const { token, channelName } of channelManager.getAllTokens()) {
-    // Derive channelCode from registered map or skip — will populate on first command
-    // For startup we send directly via token
     try {
-      await bot._safeRequest('POST', `/api/webhooks/${token}/`, { content: greeting });
+      const greetMsg = await bot._safeRequest('POST', `/api/webhooks/${token}/`, { content: greeting });
+      // Auto-delete startup greeting after same delay as /help (HELP_DELETE_SECONDS)
+      if (greetingDeleteSecs > 0 && greetMsg && greetMsg.message_id) {
+        setTimeout(async () => {
+          try {
+            await bot._safeRequest('DELETE', `/api/webhooks/${token}/messages/${greetMsg.message_id}`);
+          } catch (err) {
+            console.error(`Failed to delete greeting in ${channelName}:`, err.message);
+          }
+        }, greetingDeleteSecs * 1000);
+      }
     } catch (err) {
       console.error(`Failed to send welcome to ${channelName}:`, err.message);
     }
