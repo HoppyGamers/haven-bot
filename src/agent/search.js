@@ -20,8 +20,8 @@ async function search(query, searxngUrl, maxResults = 5) {
   const url = new URL('/search', searxngUrl);
   url.searchParams.set('q', query);
   url.searchParams.set('format', 'json');
-  url.searchParams.set('categories', 'general');
-  url.searchParams.set('language', 'en');
+  url.searchParams.set('language', 'en-US');
+  url.searchParams.set('safesearch', '0');
 
   const raw = await new Promise((resolve, reject) => {
     const lib = url.protocol === 'https:' ? https : http;
