@@ -368,13 +368,14 @@ if (AGENT_ENABLED) {
       const { getDb } = require('./agent/database');
 
       const agentDb = getDb();
-      if (!agentDb) return; // agent not initialized yet
+      if (!agentDb) { console.log('[Agent] Message received but DB not ready yet'); return; } // agent not initialized yet
 
       const { content, user, user_id, channel_id } = msgData;
       const config = getChannelConfig(channel_id, agentDb);
 
       if (!isEnabledForChannel(channel_id, agentDb)) return;
       if (!shouldRespond(msgData, config)) return;
+      console.log(`[Agent] Mode ${config.mode} triggered for: ${content.slice(0, 50)}`);
 
       // Extract the actual question (strips agent name for mention mode)
       const question = extractQuestion(content, config.agentName);
