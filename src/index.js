@@ -243,16 +243,13 @@ bot.on('command', async (data) => {
       const agentConfig  = AGENT_ENABLED ? require('./agent/config').getGlobalConfig() : null;
       const agentCmd     = agentConfig ? agentConfig.agentCommand : null;
       const agentName    = agentConfig ? agentConfig.agentName : null;
+      const config       = agentConfig || {};
 
-      const agentSection = AGENT_ENABLED ? `
-
-**AI Agent${agentName ? ` — ${agentName}` : ''}:**
-\`/${agentCmd} <message>\` - Chat with ${agentName}
-\`/${agentCmd} remember <fact>\` - Store a persistent memory
-\`/${agentCmd} what do you know about me?\` - Recall stored memories
-\`/${agentCmd} forget everything about me\` - Clear your memories
-\`/${agentCmd} config\` - Agent config commands (admin)
-*Type \`/${agentCmd} help\` for full AI agent command list*` : '';
+      const agentSection = AGENT_ENABLED
+        ? `\n\n**AI Agent — ${agentName}:**\n` +
+          `\`/${agentCmd} help\` - List all AI Agent commands\n` +
+          `*(Powered by ${config.ollamaModel} via Ollama)*`
+        : '';
 
       const helpText = `
 🤖 **Haven Bot Help**
@@ -307,7 +304,7 @@ bot.on('command', async (data) => {
 
 **Fun:**
 \`/ping\` - Test the bot
-\`/help\` - This message\${agentSection}
+\`/help\` - This message${agentSection}
       `.trim();
 
       const helpDeleteSecs = parseInt(process.env.HELP_DELETE_SECONDS || '0', 10);
@@ -372,7 +369,7 @@ async function main() {
 
   // Load agent if enabled
   if (AGENT_ENABLED) {
-    agentModule = require('./agent/index');
+    agentModule = require('./agent/agent');
     await agentModule.initAgent(bot, channelManager);
   }
 

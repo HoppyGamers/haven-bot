@@ -81,7 +81,8 @@ async function handleAgentCommand(bot, data) {
 
   // --- Handle help subcommand ---
   if (userMessage.toLowerCase() === 'help') {
-    return bot.sendMessage(
+    const agentHelpDeleteSecs = parseInt(process.env.HELP_DELETE_SECONDS || '0', 10);
+    const agentHelpMsg = await bot.sendMessage(
       `🤖 **${config.agentName} — AI Agent Help**
 
 ` +
@@ -117,6 +118,12 @@ async function handleAgentCommand(bot, data) {
 ` +
       `\`/${config.agentCommand} config reset\` - Revert to global defaults`
     );
+    if (agentHelpDeleteSecs > 0 && agentHelpMsg && agentHelpMsg.message_id) {
+      setTimeout(async () => {
+        try { await bot.deleteMessage(agentHelpMsg.message_id, channel_id); } catch {}
+      }, agentHelpDeleteSecs * 1000);
+    }
+    return;
   }
 
   // --- Handle config subcommands (admin only) ---
