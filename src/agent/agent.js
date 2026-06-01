@@ -82,9 +82,15 @@ async function handleAgentCommand(bot, data) {
   const { user, user_id, channel_id, args } = data;
   const config = getChannelConfig(channel_id, agentDb);
 
-  if (!isEnabledForChannel(channel_id, agentDb)) return;
-
   const userMessage = args.join(' ').trim();
+
+  // Handle config subcommands BEFORE the enabled check
+  // so admins can re-enable the agent after disabling it
+  if (userMessage.startsWith('config') && (userMessage === 'config' || userMessage.startsWith('config '))) {
+    return handleConfigCommand(bot, data, userMessage.slice(6).trim(), config);
+  }
+
+  if (!isEnabledForChannel(channel_id, agentDb)) return;
 
   if (!userMessage) {
     return bot.sendMessage(
@@ -139,11 +145,6 @@ async function handleAgentCommand(bot, data) {
       }, agentHelpDeleteSecs * 1000);
     }
     return;
-  }
-
-  // --- Handle config subcommands (admin only) ---
-  if (userMessage.startsWith('config ')) {
-    return handleConfigCommand(bot, data, userMessage.slice(7).trim(), config);
   }
 
   // --- Handle remember requests ---
