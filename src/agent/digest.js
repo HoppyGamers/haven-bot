@@ -121,7 +121,7 @@ function collectItems(sourceChannelId, frequency, lastRun) {
 
   const placeholders = feedIds.map(() => '?').join(',');
   const rows = db.prepare(`
-    SELECT rs.item_guid as guid, rs.feed_id, rs.seen_at, rf.title as feed_title, rf.url as feed_url
+    SELECT rs.item_guid as guid, rs.item_title as title, rs.feed_id, rs.seen_at, rf.title as feed_title, rf.url as feed_url
     FROM rss_seen rs
     JOIN rss_feeds rf ON rs.feed_id = rf.id
     WHERE rs.feed_id IN (${placeholders})
@@ -143,19 +143,24 @@ async function generateDigest(items, sourceChannelName, frequency, config) {
   const period = frequency === 'daily' ? 'today' : 'this week';
 
   // Build a simple item list for the prompt
-  const itemList = items.slice(0, 30).map((item, i) =>
-    `${i + 1}. [${item.feed_title || item.feed_url}] ${item.guid}`
-  ).join('\n');
+  // Use real article titles where available, fall back to guid
+  const itemList = items.slice(0, 30).map((item, i) => {
+    const title = item.title || item.guid;
+    const source = item.feed_title || item.feed_url || 'Unknown';
+    return `${i + 1}. [${source}] ${title}`;
+  }).join('\n');
 
   const prompt = `You are summarizing ${frequency} news for the "${sourceChannelName}" channel.
 
-Here are the RSS items posted ${period}:
+Here are the actual article titles posted ${period} (format: [Source] Title):
 
 ${itemList}
 
-Write a concise ${frequency} digest summary. Group related items by topic. 
-Highlight the most important stories. Keep it readable and engaging.
-Format with clear sections. Aim for 200-400 words.`;
+Write a concise ${frequency} digest summary using ONLY these real articles.
+Do NOT invent stories or add information not present in the titles above.
+Group related articles by topic. Highlight the most important stories.
+Keep it readable and engaging. Aim for 200-400 words.
+Today's date is ${new Date().toDateString()}.`;
 
   const response = await chat({
     ollamaUrl:    config.ollamaUrl,

@@ -768,9 +768,9 @@ const rssFeeds = {
     ).get(feedId, guid) !== undefined;
   },
 
-  markSeen(feedId, guid) {
+  markSeen(feedId, guid, title = null) {
     try {
-      db.prepare('INSERT INTO rss_seen (feed_id, item_guid) VALUES (?, ?)').run(feedId, guid);
+      db.prepare('INSERT INTO rss_seen (feed_id, item_guid, item_title) VALUES (?, ?, ?)').run(feedId, guid, title || null);
     } catch {
       // already seen, ignore
     }

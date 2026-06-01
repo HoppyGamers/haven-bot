@@ -158,7 +158,7 @@ async function checkFeeds(bot, rssFeeds) {
       for (const item of toPost) {
         try {
           await bot.sendMessage(formatItem(displayTitle, item), feed.channel_id);
-          rssFeeds.markSeen(feed.id, item.guid);
+          rssFeeds.markSeen(feed.id, item.guid, item.title || null);
         } catch (err) {
           console.error(`[RSS] Failed to post item from feed ${feed.id}:`, err.message);
         }
