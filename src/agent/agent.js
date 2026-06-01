@@ -187,7 +187,8 @@ async function handleAgentCommand(bot, data) {
   let systemPrompt    = config.systemPrompt + memoryContext;
 
   // Add explicit tool use instruction to system prompt
-  const toolInstruction = `\n\nIMPORTANT: You have access to tools. Use them when appropriate:\n- Use list_calendar_events when asked about upcoming events or schedule\n- Use create_calendar_event when asked to add/create/schedule an event\n- Use get_leaderboard when asked about rankings, top users, or XP standings\n- Use get_datetime when asked about current time or date\n- Use play_sound when asked to play a sound\n- Use list_rss_feeds when asked about news feeds\nAlways use tools instead of guessing when the information can come from a tool.`;
+  const currentYear = new Date().getFullYear();
+  const toolInstruction = `\n\nIMPORTANT: You have access to tools. Use them immediately without asking for confirmation.\nThe current year is ${currentYear}. Always use ${currentYear} when the user does not specify a year.\n\nWhen to use each tool:\n- list_calendar_events: user asks about upcoming events or schedule\n- create_calendar_event: user asks to add/create/schedule an event — do it immediately, use year ${currentYear}\n- get_leaderboard: user asks about rankings, top users, XP standings\n- get_datetime: user asks about current time or date\n- play_sound: user asks to play a sound\n- list_rss_feeds: user asks about news feeds\n\nDo NOT ask for confirmation before calling a tool. Act immediately.`;
   systemPrompt = systemPrompt + toolInstruction;
 
   // Web search — run if SearXNG is configured and message likely needs current info
