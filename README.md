@@ -1,74 +1,67 @@
-# ⬡ Haven Bot
+# Haven Bot
 
-A feature-rich community bot for [Haven](https://github.com/ancsemi/Haven) voice chat servers, built with Node.js and SQLite. Self-hosted, open-source, and designed to run alongside your Haven server with no external service dependencies.
+A fully featured community bot for [Haven](https://github.com/ancsemi/Haven) self-hosted voice chat servers, with an optional AI Agent powered by [Ollama](https://ollama.ai) and [SearXNG](https://searxng.org).
 
----
+## Features
 
-## ✨ Features
+### 📊 User Profiles & XP
+- Global XP pool across all channels
+- Leveling system with level-up announcements
+- Daily bonus with streak tracking
+- `/profile`, `/level`, `/stats`, `/daily`, `/leaderboard`, `/top`
 
-### 👤 User Profiles & Leveling
-- XP system with global and per-channel tracking
-- Automatic level progression (100 XP per level)
-- `/daily` bonus with streak tracking
-- `/profile`, `/level`, `/stats` commands
-- Level-up announcements mid-conversation
+### 🏆 Achievements
+- 16 achievements across 5 categories
+- XP rewards and chat announcements on unlock
 
-### 🏆 Leaderboards
-- `/leaderboard` — channel top 10
-- `/leaderboard global` — global top 10
-- `/top [limit]` — global leaderboard with custom limit
-
-### 🎖️ Achievements
-- 16 achievements across 5 categories: Messages, Levels, Daily Streak, Moderation, and Leaderboard
-- Announced in chat when earned
-- XP rewards for most achievements
-- Visible in `/profile`
-
-### 🛡️ Moderation
-- `/kick` — removes user from channel
-- `/ban` / `/unban` — permanently ban or unban a user
-- `/mute` / `/unmute` — temporarily silence a user
-- `/warn` — warning system with auto-kick at 3 warnings
-- `/modlog` — full audit trail
-- Role-based admin system (`/addadmin`, `/removeadmin`, `/admins`)
-
-### 🔊 Soundboard
-- `/soundboard <name>` — play a sound for everyone in the channel
-- `/sounds` — list configured sounds
-- Configured via `SOUNDS=` in `.env`
+### 👮 Moderation
+- `/ban`, `/kick`, `/warn`, `/mute`, `/unmute`, `/unban`
+- Auto-kick at 3 warnings
+- Audit log via `/modlog`
+- Admin system with `/addadmin`, `/removeadmin`, `/admins`
 
 ### 📅 Calendar & Events
-- Create events with `/calendar add 2026-04-13 17:00 Group Raid --notify 1d 6h 30m`
-- Multiple notification reminders per event
-- RSVP system with `/rsvp <id>`
-- Timezone-aware display via `TIMEZONE=` in `.env`
+- Create events with `/calendar add`
+- Automatic reminders at 1 day, 6 hours, and 30 minutes before
+- RSVP with `/rsvp <id>`
+- Per-channel event lists, with `/calendar list all` for admins
 
-### 📡 RSS Feed Reader
-- Monitor multiple RSS/Atom feeds
-- Automatic posting on configurable interval
-- Keyword filtering per feed
-- Pause/resume individual feeds
+### 📰 RSS Feeds
+- Monitor multiple feeds per channel
+- Auto-post new items on a configurable interval
+- `/rss add`, `/rss remove`, `/rss pause`, `/rss resume`, `/rss list`, `/rss check`
 
-### ⚡ Custom Commands
-- Create server-specific slash commands without touching code
-- Supports `{user}`, `{channel}`, `{count}` variables
-- Permission controlled (`admin` or `everyone`)
+### 🎵 Soundboard
+- `/soundboard <name>` — play Haven soundboard sounds
+- `/sounds` — list configured sounds
+
+### ⚙️ Custom Commands
+- Create server-specific slash commands with `/addcommand`
+- Edit and remove with `/editcommand`, `/removecommand`
+
+### 🌐 Multi-Channel
+- One bot instance serves multiple Haven channels
+- Each channel gets its own bot webhook, all handled by a single process
+- Commands reply to the channel they were issued in
+- RSS feeds and calendar reminders post to the channel they were configured in
+
+### 🤖 AI Agent (Optional)
+- **Natural language interface** — chat with the AI Agent using a configurable slash command (e.g. `/bob`)
+- **Web search** — answers grounded in real-time results via SearXNG
+- **Persistent memory** — remembers facts across conversations and restarts
+- **Conversation history** — multi-turn context so the agent follows long discussions
+- **Tool integration** — agent can create calendar events, fetch leaderboards, play sounds, and list RSS feeds
+- **Participation modes** — `command`, `mention`, `passive`, or `active`
+- **Per-channel personas** — different name, prompt, and mode per channel at runtime
+- **Powered by Ollama** — runs locally, no cloud dependencies
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### Requirements
-
-- [Haven](https://github.com/ancsemi/Haven) server (self-hosted)
-- [Node.js](https://nodejs.org/) 20 or newer
-- A Haven bot webhook token (see [Creating a Bot](#creating-a-bot))
-
-### 1. Clone and Install
+### 1. Install Dependencies
 
 ```bash
-git clone https://github.com/HoppyGamers/haven-bot.git
-cd haven-bot
 npm install
 ```
 
@@ -78,10 +71,13 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` with your Haven server details — or run the interactive setup wizard:
+Edit `.env` with your Haven server details. At minimum:
 
-```bash
-npm run setup
+```env
+HAVEN_SERVER_URL=https://your-haven-server.com
+WEBHOOK_TOKEN=your_64_character_webhook_token_here
+CALLBACK_URL=http://your-public-ip:3000/
+DB_PATH=/data/haven-bot.db
 ```
 
 ### 3. Run
@@ -98,190 +94,154 @@ npm run dev
 
 ---
 
-## 🤖 Creating a Bot
+## Multi-Channel Setup
 
-1. Open your Haven server and go to **Settings → Server Admin Settings → Bots**
-2. Create a new webhook — give it a name and optionally an avatar URL
-3. Set a **Callback URL** — this is the public address Haven will POST slash commands to (e.g. `http://your-ip:3000`)
-4. Set a **Callback Secret** — any random string, used for HMAC verification
-5. Copy the **Webhook Token** (64-character hex string)
-6. Add your token and callback details to `.env`
+Create one webhook per channel in Haven's Bot Management. All webhooks must point to the same `CALLBACK_URL` (Haven routes all slash commands through the primary bot's callback URL).
 
-> Haven's bot documentation: [github.com/ancsemi/Haven](https://github.com/ancsemi/Haven)
-
----
-
-## ⚙️ Configuration
-
-All settings live in `.env`. Copy `.env.example` to get started. Key settings:
-
-| Variable | Description | Default |
-|---|---|---|
-| `HAVEN_SERVER_URL` | Your Haven server URL | — |
-| `WEBHOOK_TOKEN` | Bot webhook token from Haven admin | — |
-| `CALLBACK_URL` | Public URL for slash command callbacks | — |
-| `CALLBACK_SECRET` | HMAC verification secret | — |
-| `PORT` | Callback server port | `3000` |
-| `TIMEZONE` | IANA timezone for calendar display | `UTC` |
-| `SOUNDS` | Comma-separated list of soundboard sound names | — |
-| `CUSTOM_COMMANDS_PERMISSION` | Who can manage custom commands (`admin`/`everyone`) | `admin` |
-| `RSS_CHECK_INTERVAL` | Minutes between RSS feed checks | `15` |
-| `RSS_MAX_ITEMS` | Max new items posted per feed per check | `5` |
-| `BOT_GREETING` | Startup message when bot comes online | Built-in default |
-| `BOT_FIRST_TIME_GREETING` | Welcome message for first-time users (supports `{user}`) | Built-in default |
-| `XP_COOLDOWN_MS` | Milliseconds between XP awards per user | `5000` |
-| `DB_PATH` | Path to SQLite database file | `./haven-bot.db` |
-| `DEBUG` | Enable verbose logging | `false` |
+```env
+# Format: ChannelName:ChannelCode:Token (comma separated)
+# ChannelCode is the 8-character join code shown in the Haven channel header
+WEBHOOK_TOKENS=General:a9b20e93:token1,Gaming:87057084:token2,Events:76fe37ad:token3
+```
 
 ---
 
-## 📋 Command Reference
+## AI Agent Setup
 
-### Profile
-| Command | Description |
-|---|---|
-| `/profile [@user]` | View your profile or another user's |
-| `/level` | Check your channel level and XP |
-| `/stats` | Detailed stats and global rank |
-| `/daily` | Claim daily XP bonus (resets at midnight) |
+The AI Agent requires [Ollama](https://ollama.ai) running locally or on your network.
 
-### Leaderboards
-| Command | Description |
-|---|---|
-| `/leaderboard` | Channel top 10 |
-| `/leaderboard global` | Global top 10 |
-| `/top [limit]` | Global leaderboard with custom limit (max 25) |
-
-### Soundboard
-| Command | Description |
-|---|---|
-| `/soundboard <name>` | Play a soundboard sound |
-| `/sounds` | List configured sounds |
-| `/stopsound` | Stop current sound *(not yet supported by Haven API)* |
-
-### Calendar
-| Command | Description |
-|---|---|
-| `/calendar add <date> <time> <title> [--notify <offsets>]` | Create an event (admin) |
-| `/calendar list` | Upcoming events |
-| `/calendar view <id>` | Event details and attendees |
-| `/calendar edit <id> <field> <value>` | Edit title, date, or time (admin) |
-| `/calendar delete <id>` | Delete an event (admin) |
-| `/rsvp <id>` | Toggle attendance |
-
-Notify offsets: `1d` `6h` `30m` — creates one reminder per offset.
-
-### RSS Feeds
-| Command | Description |
-|---|---|
-| `/rss add <url> [--filter <keyword>]` | Add a feed (admin) |
-| `/rss remove <id>` | Remove a feed (admin) |
-| `/rss pause <id>` | Pause a feed (admin) |
-| `/rss resume <id>` | Resume a feed (admin) |
-| `/rss list` | Show all feeds |
-| `/rss check` | Manually trigger a check (admin) |
-
-### Custom Commands
-| Command | Description |
-|---|---|
-| `/customcommands` | List all custom commands |
-| `/addcommand <name> <response>` | Create a command (admin) |
-| `/editcommand <name> <response>` | Edit a command (admin) |
-| `/removecommand <name>` | Delete a command (admin) |
-
-Response variables: `{user}`, `{channel}`, `{count}`
-
-### Moderation *(admin only)*
-| Command | Description |
-|---|---|
-| `/kick @user [reason]` | Kick user from channel |
-| `/ban @user [reason]` | Ban a user from the server |
-| `/unban @user` | Unban a user |
-| `/warn @user [reason]` | Issue a warning (3 = auto-kick) |
-| `/mute @user [duration] [reason]` | Mute a user temporarily |
-| `/unmute @user` | Unmute a user |
-| `/warnings [@user]` | Check warnings |
-| `/modlog` | View recent moderation actions |
-| `/addadmin [@user] [role]` | Add admin or moderator |
-| `/removeadmin @user` | Remove an admin |
-| `/admins` | List all admins |
-
-Duration format: `30m`, `2h`, `1d`
-
----
-
-## 🐳 Docker
+### 1. Install Ollama and pull a model
 
 ```bash
-# Clone the repo
-git clone https://github.com/HoppyGamers/haven-bot.git
-cd haven-bot
+ollama pull qwen2.5:14b
+```
 
-# Configure
-cp .env.example .env
-# Edit .env with your Haven server details
+`qwen2.5:7b` works for getting started. Upgrade to `14b` for better tool calling and instruction following.
 
-# Start
+### 2. Configure the agent
+
+```env
+AGENT_ENABLED=true
+AGENT_NAME=Bob
+AGENT_COMMAND=bob
+AGENT_SYSTEM_PROMPT=You are Bob, a helpful AI assistant for the Haven voice chat server. Be concise and friendly.
+AGENT_MODE=command
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:14b
+
+# Optional — enables web search via SearXNG
+SEARXNG_URL=http://localhost:8118
+```
+
+### 3. Use the agent
+
+```
+/bob tell me about yourself
+/bob remember I prefer race results without spoilers
+/bob what do you know about me?
+/bob add the British Grand Prix to the calendar for July 5th at 9am
+/bob who's at the top of the leaderboard?
+/bob help
+```
+
+### Participation Modes
+
+Set per-channel with `/bob config set-mode <mode>`:
+
+| Mode | Behavior |
+|---|---|
+| `command` | Only responds to `/bob` slash commands (default) |
+| `mention` | Responds when the agent's full name appears in a message |
+| `passive` | Monitors messages, responds to questions it can answer |
+| `active` | Participates freely, rate-limited by `AGENT_COOLDOWN` |
+
+### Per-Channel Configuration
+
+```
+/bob config show                    — current channel config
+/bob config set-prompt "You are..." — set custom persona for this channel
+/bob config set-mode passive        — change participation mode
+/bob config set-name Jeeves         — rename agent for this channel
+/bob config clear-history           — wipe conversation history
+/bob config clear-memory            — wipe channel memory
+/bob config enable / disable        — toggle agent in this channel
+/bob config reset                   — revert to global defaults
+```
+
+---
+
+## Docker
+
+```bash
 docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Update after pulling new code
-docker compose build && docker compose up -d
-
-# Backup database
-docker compose cp haven-bot:/data/haven-bot.db ./backup.db
 ```
 
-The database is stored in a named Docker volume (`haven_data`) and persists across container restarts and updates.
+Or pull the pre-built image:
 
----
-
-## 📁 Project Structure
-
+```yaml
+services:
+  haven-bot:
+    image: ghcr.io/hoppygamers/haven-bot:latest
+    env_file: .env
+    volumes:
+      - /your/data/path:/data
+    ports:
+      - "3000:3000"
 ```
-haven-bot/
-├── src/
-│   ├── index.js          # Entry point, command routing
-│   ├── bot.js            # Haven webhook client
-│   ├── database.js       # SQLite schema and operations
-│   ├── achievements.js   # Achievement definitions and engine
-│   ├── notifier.js       # Calendar notification runner
-│   ├── rss.js            # RSS fetcher and poller
-│   ├── setup.js          # Interactive setup wizard
-│   ├── commands/
-│   │   ├── profiles.js   # Profile, XP, leaderboard commands
-│   │   ├── moderation.js # Moderation commands
-│   │   ├── soundboard.js # Soundboard commands
-│   │   ├── calendar.js   # Calendar and RSVP commands
-│   │   ├── rss.js        # RSS feed commands
-│   │   ├── custom.js     # Custom command management
-│   │   └── default.js    # Stub for additional commands
-│   └── utils/
-│       └── permissions.js # Permission helpers
-├── Dockerfile
-├── docker-compose.yml
-├── .env.example
-├── .gitignore
-├── package.json
-└── README.md
+
+Update:
+```bash
+docker compose pull && docker compose up -d && docker image prune -f
 ```
 
 ---
 
-## 🔐 Security
+## Project Structure
 
-- **Never commit `.env`** — it contains your webhook token. It is gitignored by default.
-- **Set `CALLBACK_SECRET`** — enables HMAC signature verification on incoming callbacks. Without it, anyone who knows your callback URL can send fake commands.
-- **Admin system** — uses Haven's numeric user IDs. The first admin must be added via `/addadmin` and is granted bootstrap access automatically.
-- **Database** — `haven-bot.db` is stored locally and unencrypted. Restrict filesystem access on shared servers.
+```
+src/
+├── bot.js              — Haven webhook client
+├── channels.js         — Multi-channel token routing
+├── database.js         — SQLite schema and all DB operations
+├── index.js            — Entry point, command routing
+├── notifier.js         — Calendar notification poller
+├── rss.js              — RSS fetcher and poller
+├── setup.js            — Interactive setup wizard
+├── achievements.js     — Achievement definitions and engine
+├── agent/              — AI Agent (loaded only when AGENT_ENABLED=true)
+│   ├── agent.js        — Main agent handler, tool orchestration
+│   ├── config.js       — Global/channel config resolution
+│   ├── database.js     — Agent-specific SQLite database
+│   ├── memory.js       — Persistent memory and recall
+│   ├── modes.js        — Participation mode logic
+│   ├── ollama.js       — Ollama API client with tool calling
+│   ├── search.js       — SearXNG web search integration
+│   └── tools.js        — Haven Bot tool definitions and execution
+├── commands/
+│   ├── calendar.js
+│   ├── custom.js
+│   ├── moderation.js
+│   ├── profiles.js
+│   ├── rss.js
+│   └── soundboard.js
+└── utils/
+    └── permissions.js
+```
 
 ---
 
-## 🤝 Contributing
+## Environment Variables
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [`.env.example`](.env.example) for the full reference with descriptions.
+
+---
+
+## Further Reading
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — Design decisions and system overview
+- [`HAVEN_API_NOTES.md`](HAVEN_API_NOTES.md) — Undocumented Haven API behaviors
+- [`CHANGELOG.md`](CHANGELOG.md) — Version history
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contributor guide
 
 ---
 
@@ -291,6 +251,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-## 📄 License
+## License
 
 MIT — see [LICENSE](LICENSE) for details.
