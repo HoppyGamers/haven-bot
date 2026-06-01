@@ -16,6 +16,7 @@ const {
   formatMemoriesForDisplay,
 } = require('./memory');
 const { search, likelyNeedsSearch } = require('./search');
+const { formatToolsForPrompt, parseToolCall, executeTool } = require('./tools');
 
 let agentDb = null;
 
@@ -209,6 +210,10 @@ async function handleAgentCommand(bot, data) {
       `If the results contain the answer, use them. Do not say you lack real-time data.`;
   }
 
+  // Add tool definitions to system prompt
+  const toolPrompt = formatToolsForPrompt();
+  const finalSystemPrompt = systemPrompt + toolPrompt;
+
   const thinkingMsg = await bot.sendMessage(`_${config.agentName} is thinking..._`);
   const thinkingId  = thinkingMsg?.message_id || null;
 
@@ -219,12 +224,42 @@ async function handleAgentCommand(bot, data) {
   };
 
   try {
-    const response = await chat({
+    let response = await chat({
       ollamaUrl:    config.ollamaUrl,
       model:        config.ollamaModel,
-      systemPrompt,
+      systemPrompt: finalSystemPrompt,
       messages,
     });
+
+    // Check if Ollama wants to call a tool
+    const toolCall = parseToolCall(response);
+    if (toolCall) {
+      console.log(`[Agent] Tool call: ${toolCall.tool}`, toolCall.args);
+
+      const toolResult = await executeTool(toolCall.tool, toolCall.args, {
+        bot,
+        channelId: channel_id,
+        userId:    user_id,
+        username:  user,
+        timezone:  process.env.TIMEZONE,
+      });
+
+      console.log(`[Agent] Tool result: ${toolResult.slice(0, 100)}`);
+
+      // Send tool result back to Ollama for a natural language response
+      const followUpMessages = [
+        ...messages,
+        { role: 'assistant', content: response },
+        { role: 'user',      content: `Tool result for ${toolCall.tool}: ${toolResult}` },
+      ];
+
+      response = await chat({
+        ollamaUrl:    config.ollamaUrl,
+        model:        config.ollamaModel,
+        systemPrompt: systemPrompt,
+        messages:     followUpMessages,
+      });
+    }
 
     await deleteThinking();
 
@@ -233,10 +268,13 @@ async function handleAgentCommand(bot, data) {
       return;
     }
 
-    conversations.add(channel_id, 'assistant', response);
+    // Strip any leftover TOOL_CALL lines from the response
+    const cleanResponse = response.replace(/TOOL_CALL:\s*\{[\s\S]*?\}/g, '').trim();
+
+    conversations.add(channel_id, 'assistant', cleanResponse);
     conversations.trim(channel_id, config.historySize);
 
-    await bot.sendMessage(`**${config.agentName}:** ${response}`);
+    await bot.sendMessage(`**${config.agentName}:** ${cleanResponse}`);
 
   } catch (err) {
     await deleteThinking();
