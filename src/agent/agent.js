@@ -15,6 +15,7 @@ const {
   getMemoryContext,
   formatMemoriesForDisplay,
 } = require('./memory');
+const { search, likelyNeedsSearch } = require('./search');
 
 let agentDb = null;
 
@@ -41,6 +42,19 @@ async function initAgent(bot, channelManager) {
     console.warn(`   Agent will start but responses will fail until Ollama is reachable.`);
   } else {
     console.log(`   ✅ Ollama ready`);
+  }
+
+  // Health check SearXNG if configured
+  if (config.searxngUrl) {
+    const { healthCheck: searxCheck } = require('./search');
+    const searxHealth = await searxCheck(config.searxngUrl);
+    if (!searxHealth.ok) {
+      console.warn(`   ⚠️  SearXNG unavailable: ${searxHealth.error}`);
+    } else {
+      console.log(`   ✅ SearXNG ready (${config.searxngUrl})`);
+    }
+  } else {
+    console.log(`   ℹ️  SearXNG not configured — web search disabled`);
   }
 
   const allTokens = channelManager.getAllTokens();
@@ -169,7 +183,26 @@ async function handleAgentCommand(bot, data) {
 
   // Inject persistent memory into system prompt
   const memoryContext = getMemoryContext(user_id, channel_id);
-  const systemPrompt  = config.systemPrompt + memoryContext;
+  let systemPrompt    = config.systemPrompt + memoryContext;
+
+  // Web search — run if SearXNG is configured and message likely needs current info
+  let searchContext = '';
+  if (config.searxngUrl && likelyNeedsSearch(userMessage)) {
+    try {
+      const { formatted } = await search(userMessage, config.searxngUrl, 5);
+      if (formatted && formatted !== 'No search results found.') {
+        searchContext = formatted;
+        console.log(`[Agent] Search performed for: ${userMessage.slice(0, 60)}`);
+      }
+    } catch (err) {
+      console.warn(`[Agent] Search failed: ${err.message}`);
+    }
+  }
+
+  // Inject search results as additional context if available
+  if (searchContext) {
+    systemPrompt += `\n\nCurrent web search results for context (use these to answer accurately, cite sources when helpful):\n${searchContext}`;
+  }
 
   const thinkingMsg = await bot.sendMessage(`_${config.agentName} is thinking..._`);
   const thinkingId  = thinkingMsg?.message_id || null;
