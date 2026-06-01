@@ -19,6 +19,8 @@ function shouldRespond(message, config) {
   const { content, user_id } = message;
   const mode = config.mode || 'command';
 
+  console.log(`[Agent] shouldRespond: mode=${mode}, content="${(content||'').slice(0,40)}"`);
+
   // Never respond to empty messages or webhook messages
   if (!content || !content.trim()) return false;
 
