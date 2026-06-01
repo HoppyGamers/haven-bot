@@ -357,6 +357,63 @@ bot.on('command', async (data) => {
 // ---------------------------------------------------------------------------
 // Error handler
 // ---------------------------------------------------------------------------
+// Agent message event listener — handles mention/passive/active modes
+if (AGENT_ENABLED) {
+  bot.on('message', async (msgData) => {
+    try {
+      // Lazy load to avoid circular deps
+      const agentMod    = require('./agent/agent');
+      const { shouldRespond, recordResponse, extractQuestion } = require('./agent/modes');
+      const { getChannelConfig, isEnabledForChannel } = require('./agent/config');
+      const { getDb } = require('./agent/database');
+
+      const agentDb = getDb();
+      if (!agentDb) return; // agent not initialized yet
+
+      const { content, user, user_id, channel_id } = msgData;
+      const config = getChannelConfig(channel_id, agentDb);
+
+      if (!isEnabledForChannel(channel_id, agentDb)) return;
+      if (!shouldRespond(msgData, config)) return;
+
+      // Extract the actual question (strips agent name for mention mode)
+      const question = extractQuestion(content, config.agentName);
+      if (!question) return;
+
+      recordResponse(channel_id);
+
+      // Build a channelBot proxy for this message
+      const channelBot = new Proxy(bot, {
+        get(target, prop) {
+          if (prop === 'sendMessage') {
+            return (text, options = {}) => target.sendMessage(text, channel_id, options);
+          }
+          if (prop === 'deleteMessage') {
+            return (messageId) => target.deleteMessage(messageId, channel_id);
+          }
+          if (prop === 'playSound') {
+            return (soundName) => target.playSound(soundName, channel_id);
+          }
+          return target[prop];
+        }
+      });
+
+      // Route to agent handler
+      await agentMod.handleAgentCommand(channelBot, {
+        user,
+        user_id,
+        channel_id,
+        args:        question.split(/\s+/),
+        raw_content: question,
+        command:     config.agentCommand,
+      });
+
+    } catch (err) {
+      console.error('[Agent] Message handler error:', err.message);
+    }
+  });
+}
+
 bot.on('error', (err) => {
   console.error('❌ Bot error:', err.message);
 });

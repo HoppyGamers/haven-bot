@@ -352,6 +352,18 @@ class HavenBot extends EventEmitter {
             // All command routing handled by index.js via the 'command' event
           }
 
+          // Emit raw message events so agent participation modes can listen
+          if (data.event === 'message' && data.message && !data.message.is_webhook) {
+            this.emit('message', {
+              content:    data.message.content,
+              user:       data.message.author?.username || 'Unknown',
+              user_id:    data.message.author?.id,
+              channel_id: data.channelId,
+              message_id: data.message.id,
+              timestamp:  data.message.timestamp || new Date().toISOString(),
+            });
+          }
+
           // Also handle legacy message events with slash commands (fallback)
           if (data.event === 'message' && data.message && data.message.content?.startsWith('/')) {
             const parts   = data.message.content.slice(1).split(/\s+/);
