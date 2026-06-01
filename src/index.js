@@ -9,6 +9,10 @@ const calendarCommands = require('./commands/calendar');
 const rssCommands      = require('./commands/rss');
 const { startRssPoller } = require('./rss');
 const channelManager     = require('./channels');
+
+// Agent — loaded only when AGENT_ENABLED=true
+const AGENT_ENABLED = (process.env.AGENT_ENABLED || 'false').toLowerCase() === 'true';
+let agentModule = null;
 const { startNotifier }  = require('./notifier');
 const { checkAchievements, formatUnlockAnnouncement, getGlobalRank, getTotalMessages } = require('./achievements');
 const { db } = require('./database');
