@@ -65,8 +65,8 @@ bot.on('command', async (data) => {
 
   // Award XP and check achievements
   // Skip XP for moderation/admin/daily commands, skip achievements for read-only commands
-  const skipXp          = ['ban','kick','warn','mute','unmute','unban','warnings','modlog','addadmin','removeadmin','admins','addcommand','editcommand','removecommand','daily','calendar','rss'].includes(command);
-  const skipAchievements = ['help','ping','sounds','stopsound','commands','customcommands','profile','leaderboard','top','calendar','rss'].includes(command);
+  const skipXp          = ['ban','kick','warn','mute','unmute','unban','warnings','modlog','addadmin','removeadmin','admins','addcommand','editcommand','removecommand','daily','calendar','rss', agentModule ? require('./agent/config').getGlobalConfig().agentCommand : ''].includes(command);
+  const skipAchievements = ['help','ping','sounds','stopsound','commands','customcommands','profile','leaderboard','top','calendar','rss', agentModule ? require('./agent/config').getGlobalConfig().agentCommand : ''].includes(command);
 
   try {
     const userId = data.user_id.toString();
