@@ -19,8 +19,6 @@ function shouldRespond(message, config) {
   const { content, user_id } = message;
   const mode = config.mode || 'command';
 
-  console.log(`[Agent] shouldRespond: mode=${mode}, content="${(content||'').slice(0,40)}"`);
-
   // Never respond to empty messages or webhook messages
   if (!content || !content.trim()) return false;
 
@@ -34,9 +32,11 @@ function shouldRespond(message, config) {
       return false;
 
     case 'mention': {
-      // Responds when agent name appears in the message
-      const name = (config.agentName || 'Bob').toLowerCase();
-      return content.toLowerCase().includes(name);
+      // Responds only when the full agent name appears in the message.
+      // Examples: "race engineer bob", "dungeon master jerry", "scoob"
+      // No partial matching — prevents false positives from common words.
+      const fullName = (config.agentName || 'Bob').toLowerCase();
+      return content.toLowerCase().includes(fullName);
     }
 
     case 'passive': {

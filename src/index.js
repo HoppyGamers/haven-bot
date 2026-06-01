@@ -359,9 +359,7 @@ bot.on('command', async (data) => {
 // ---------------------------------------------------------------------------
 // Agent message event listener — handles mention/passive/active modes
 if (AGENT_ENABLED) {
-  console.log('[Agent] Registering message event listener');
   bot.on('message', async (msgData) => {
-    console.log('[Agent] Message listener fired:', msgData.content?.slice(0, 40));
     try {
       // Lazy load to avoid circular deps
       const agentMod    = require('./agent/agent');
@@ -370,13 +368,10 @@ if (AGENT_ENABLED) {
       const { getDb } = require('./agent/database');
 
       const agentDb = getDb();
-      if (!agentDb) { console.log('[Agent] Message received but DB not ready yet'); return; }
+      if (!agentDb) return;
 
       const { content, user, user_id, channel_id } = msgData;
       const config = getChannelConfig(channel_id, agentDb);
-
-      console.log(`[Agent] DB ready, mode: ${config.mode}, channel: ${channel_id}`);
-      console.log(`[Agent] isEnabled: ${isEnabledForChannel(channel_id, agentDb)}, shouldRespond: ${shouldRespond(msgData, config)}`);
 
       if (!isEnabledForChannel(channel_id, agentDb)) return;
       if (!shouldRespond(msgData, config)) return;

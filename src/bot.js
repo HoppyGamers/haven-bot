@@ -354,7 +354,6 @@ class HavenBot extends EventEmitter {
 
           // Emit raw message events so agent participation modes can listen
           if (data.event === 'message' && data.message && !data.message.is_webhook) {
-            this._log('Emitting message event for:', data.message.content?.slice(0, 50));
             this.emit('message', {
               content:    data.message.content,
               user:       data.message.author?.username || 'Unknown',
