@@ -150,10 +150,17 @@ async function handleAgentCommand(bot, data) {
 ` +
       `\`/${config.agentCommand} config reset\` - Revert to global defaults\n\n` +
       `**RSS Digest (Admin Only):**\n` +
-      `\`/${config.agentCommand} rss_digest add <n> <src> <dest> <freq> [day] <time>\` - Create digest\n` +
-      `\`/${config.agentCommand} rss_digest list\` - List all digests\n` +
-      `\`/${config.agentCommand} rss_digest run <id>\` - Run digest now\n` +
-      `\`/${config.agentCommand} rss_digest remove <id>\` - Remove digest`
+      `\`/${config.agentCommand} rss_digest add <min_items> <source_channel_code> <dest_channel_code> <daily|weekly> [monday-sunday] <time>\`\n` +
+      `  • min_items: skip digest if fewer items than this (e.g. 3)\n` +
+      `  • source_channel_code: 8-char channel code where RSS feeds are configured\n` +
+      `  • dest_channel_code: 8-char channel code where digest will be posted\n` +
+      `  • daily|weekly: how often to run\n` +
+      `  • day: required for weekly (e.g. sunday)\n` +
+      `  • time: when to post (e.g. 9am, 14:00, 9:30am)\n` +
+      `  Example: \`/${config.agentCommand} rss_digest add 3 49e85d32 8065defb weekly sunday 9am\`\n\n` +
+      `\`/${config.agentCommand} rss_digest list\` - List all configured digests\n` +
+      `\`/${config.agentCommand} rss_digest run <id>\` - Run a digest immediately (for testing)\n` +
+      `\`/${config.agentCommand} rss_digest remove <id>\` - Remove a digest`
     );
     if (agentHelpDeleteSecs > 0 && agentHelpMsg && agentHelpMsg.message_id) {
       setTimeout(async () => {
