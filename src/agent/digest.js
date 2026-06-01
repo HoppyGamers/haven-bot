@@ -86,8 +86,17 @@ function isDue(digest, now = new Date()) {
  * Falls back to last 7 days for weekly, last 24h for daily.
  */
 function collectItems(sourceChannelId, frequency, lastRun) {
-  const db = getDb();
-  if (!db) return [];
+  // rss_seen is in haven-bot.db, not haven-agent.db
+  // Use better-sqlite3 directly with the main DB path
+  const mainDbPath = process.env.DB_PATH ||
+    require('path').join(process.cwd(), 'haven-bot.db');
+  let db;
+  try {
+    db = require('better-sqlite3')(mainDbPath);
+  } catch (err) {
+    console.error('[Digest] Could not open main DB:', err.message);
+    return [];
+  }
 
   // Determine cutoff date
   let cutoff;
@@ -112,7 +121,7 @@ function collectItems(sourceChannelId, frequency, lastRun) {
 
   const placeholders = feedIds.map(() => '?').join(',');
   const rows = db.prepare(`
-    SELECT rs.guid, rs.feed_id, rs.seen_at, rf.title as feed_title, rf.url as feed_url
+    SELECT rs.item_guid as guid, rs.feed_id, rs.seen_at, rf.title as feed_title, rf.url as feed_url
     FROM rss_seen rs
     JOIN rss_feeds rf ON rs.feed_id = rf.id
     WHERE rs.feed_id IN (${placeholders})
