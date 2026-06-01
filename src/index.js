@@ -370,10 +370,13 @@ if (AGENT_ENABLED) {
       const { getDb } = require('./agent/database');
 
       const agentDb = getDb();
-      if (!agentDb) { console.log('[Agent] Message received but DB not ready yet'); return; } // agent not initialized yet
+      if (!agentDb) { console.log('[Agent] Message received but DB not ready yet'); return; }
 
       const { content, user, user_id, channel_id } = msgData;
       const config = getChannelConfig(channel_id, agentDb);
+
+      console.log(`[Agent] DB ready, mode: ${config.mode}, channel: ${channel_id}`);
+      console.log(`[Agent] isEnabled: ${isEnabledForChannel(channel_id, agentDb)}, shouldRespond: ${shouldRespond(msgData, config)}`);
 
       if (!isEnabledForChannel(channel_id, agentDb)) return;
       if (!shouldRespond(msgData, config)) return;
