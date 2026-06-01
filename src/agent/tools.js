@@ -120,8 +120,7 @@ async function executeTool(toolName, args, context) {
         return `Error: event date ${args.date} ${args.time} appears to be in the past.`;
       }
 
-      const result = calendar.createEvent(args.title, eventUtc, channelId, username);
-      const eventId = result.lastInsertRowid;
+      const eventId = calendar.createEvent(args.title, eventUtc, channelId, username);
 
       // Add default notifications if requested
       if (args.notify !== false) {
