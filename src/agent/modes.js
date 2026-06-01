@@ -40,10 +40,17 @@ function shouldRespond(message, config) {
     }
 
     case 'passive': {
-      // Responds when message looks like a question the agent can answer
+      // Responds when message looks like a question the agent can answer,
+      // OR when the last agent message ended with a question (conversation reply context)
       const confidence = scoreMessage(content);
       const threshold  = config.confidence ?? 0.6;
-      return confidence >= threshold;
+      if (confidence >= threshold) return true;
+
+      // Check if Bob asked a question in recent conversation history — if so
+      // treat the next user message as a reply regardless of score
+      if (config._lastAgentMessageWasQuestion) return true;
+
+      return false;
     }
 
     case 'active': {

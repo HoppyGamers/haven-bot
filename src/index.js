@@ -373,6 +373,14 @@ if (AGENT_ENABLED) {
       const { content, user, user_id, channel_id } = msgData;
       const config = getChannelConfig(channel_id, agentDb);
 
+      // Check if last agent message was a question (for passive mode reply context)
+      const { conversations } = require('./agent/database');
+      const history = conversations.getHistory(channel_id, 3);
+      const lastAgentMsg = [...history].reverse().find(h => h.role === 'assistant');
+      config._lastAgentMessageWasQuestion = lastAgentMsg
+        ? lastAgentMsg.content.trim().endsWith('?')
+        : false;
+
       if (!isEnabledForChannel(channel_id, agentDb)) return;
       if (!shouldRespond(msgData, config)) return;
       console.log(`[Agent] Mode ${config.mode} triggered for: ${content.slice(0, 50)}`);
