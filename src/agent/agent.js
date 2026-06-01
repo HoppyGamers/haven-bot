@@ -232,6 +232,8 @@ async function handleAgentCommand(bot, data) {
       messages,
       tools:        TOOL_DEFINITIONS,
     });
+    console.log(`[Agent] Response content: ${(firstContent || '').slice(0, 80)}`);
+    console.log(`[Agent] Tool calls received: ${JSON.stringify(toolCalls)}`);
 
     let finalResponse = firstContent;
 
