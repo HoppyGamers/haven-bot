@@ -79,6 +79,23 @@ function initAgentDatabase() {
     )
   `);
 
+  // RSS digest configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rss_digests (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_channel_id TEXT NOT NULL,
+      dest_channel_id   TEXT NOT NULL,
+      frequency         TEXT NOT NULL,
+      day_of_week       TEXT,
+      time_of_day       TEXT NOT NULL,
+      min_items         INTEGER DEFAULT 2,
+      last_run          TIMESTAMP,
+      active            BOOLEAN DEFAULT 1,
+      created_by        TEXT,
+      created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   return db;
 }
 
@@ -185,6 +202,39 @@ const agentChannels = {
 };
 
 // ---------------------------------------------------------------------------
+// RSS Digests
+// ---------------------------------------------------------------------------
+const rssDigests = {
+  add(sourceChannelId, destChannelId, frequency, dayOfWeek, timeOfDay, minItems, createdBy) {
+    return db.prepare(`
+      INSERT INTO rss_digests
+        (source_channel_id, dest_channel_id, frequency, day_of_week, time_of_day, min_items, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(sourceChannelId, destChannelId, frequency, dayOfWeek || null, timeOfDay, minItems, createdBy);
+  },
+
+  remove(id) {
+    return db.prepare('UPDATE rss_digests SET active = 0 WHERE id = ?').run(id);
+  },
+
+  getAll() {
+    return db.prepare('SELECT * FROM rss_digests WHERE active = 1 ORDER BY id').all();
+  },
+
+  getById(id) {
+    return db.prepare('SELECT * FROM rss_digests WHERE id = ?').get(id);
+  },
+
+  updateLastRun(id) {
+    return db.prepare('UPDATE rss_digests SET last_run = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  },
+
+  getDue() {
+    return db.prepare('SELECT * FROM rss_digests WHERE active = 1').all();
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Tool log
 // ---------------------------------------------------------------------------
 const toolLog = {
@@ -204,4 +254,5 @@ module.exports = {
   memory,
   agentChannels,
   toolLog,
+  rssDigests,
 };

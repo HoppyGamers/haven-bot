@@ -17,6 +17,8 @@ const {
 } = require('./memory');
 const { search, likelyNeedsSearch } = require('./search');
 const { TOOL_DEFINITIONS, executeTool } = require('./tools');
+const { runDueDigests, parseTime, collectItems } = require('./digest');
+const { rssDigests } = require('./database');
 
 let agentDb = null;
 
@@ -70,6 +72,10 @@ async function initAgent(bot, channelManager) {
     }
   }
 
+  // Start RSS digest scheduler
+  const { startDigestScheduler } = require('./digest');
+  startDigestScheduler(bot, channelManager);
+
   console.log(`✅ Agent ready — /${config.agentCommand} <message>`);
   return { agentDb };
 }
@@ -98,6 +104,11 @@ async function handleAgentCommand(bot, data) {
       `Try: \`/${config.agentCommand} how many F1 races are left this season?\`\n` +
       `Or: \`/${config.agentCommand} remember I prefer race results without spoilers\``
     );
+  }
+
+  // --- Handle rss_digest subcommands ---
+  if (userMessage.startsWith('rss_digest')) {
+    return handleDigestCommand(bot, data, userMessage.slice(10).trim(), config);
   }
 
   // --- Handle help subcommand ---
@@ -137,7 +148,12 @@ async function handleAgentCommand(bot, data) {
 ` +
       `\`/${config.agentCommand} config enable/disable\` - Toggle agent in this channel
 ` +
-      `\`/${config.agentCommand} config reset\` - Revert to global defaults`
+      `\`/${config.agentCommand} config reset\` - Revert to global defaults\n\n` +
+      `**RSS Digest (Admin Only):**\n` +
+      `\`/${config.agentCommand} rss_digest add <n> <src> <dest> <freq> [day] <time>\` - Create digest\n` +
+      `\`/${config.agentCommand} rss_digest list\` - List all digests\n` +
+      `\`/${config.agentCommand} rss_digest run <id>\` - Run digest now\n` +
+      `\`/${config.agentCommand} rss_digest remove <id>\` - Remove digest`
     );
     if (agentHelpDeleteSecs > 0 && agentHelpMsg && agentHelpMsg.message_id) {
       setTimeout(async () => {
@@ -383,6 +399,210 @@ async function handleConfigCommand(bot, data, subcommand, config) {
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// RSS Digest commands
+// ---------------------------------------------------------------------------
+
+async function handleDigestCommand(bot, data, subcommand, config) {
+  const { user_id, channel_id, user } = data;
+
+  // Admin check
+  const { admins } = require('../database');
+  if (!admins.isAdmin(user_id.toString())) {
+    return bot.sendMessage(`❌ **Permission Denied** — RSS digest commands are admin only.`);
+  }
+
+  const parts = subcommand.split(/\s+/);
+  const action = parts[0] || '';
+
+  switch (action) {
+
+    case 'add': {
+      // /bob rss_digest add <threshold> <source_code> <dest_code> <daily|weekly> [day] <time>
+      // Minimum 5 parts: threshold source dest frequency time
+      if (parts.length < 5) {
+        return bot.sendMessage(
+          `❌ **Usage:**\n` +
+          `\`/${config.agentCommand} rss_digest add <threshold> <source_code> <dest_code> <daily|weekly> [day] <time>\`\n\n` +
+          `**Examples:**\n` +
+          `\`/${config.agentCommand} rss_digest add 3 49e85d32 8065defb weekly sunday 9am\`\n` +
+          `\`/${config.agentCommand} rss_digest add 5 e9593436 a9b20e93 daily 8am\``
+        );
+      }
+
+      const threshold    = parseInt(parts[1]);
+      const sourceCode   = parts[2];
+      const destCode     = parts[3];
+      const frequency    = parts[4]?.toLowerCase();
+
+      if (isNaN(threshold) || threshold < 1) {
+        return bot.sendMessage(`❌ Threshold must be a number of 1 or more.`);
+      }
+
+      if (!['daily', 'weekly'].includes(frequency)) {
+        return bot.sendMessage(`❌ Frequency must be \`daily\` or \`weekly\`.`);
+      }
+
+      let dayOfWeek = null;
+      let timeStr;
+
+      if (frequency === 'weekly') {
+        if (parts.length < 6) {
+          return bot.sendMessage(`❌ Weekly digests require a day and time. Example: \`weekly sunday 9am\``);
+        }
+        const DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+        if (!DAYS.includes(parts[5]?.toLowerCase())) {
+          return bot.sendMessage(`❌ Day must be one of: ${DAYS.join(', ')}`);
+        }
+        dayOfWeek = parts[5].toLowerCase();
+        timeStr   = parts[6];
+      } else {
+        timeStr = parts[5];
+      }
+
+      if (!timeStr) {
+        return bot.sendMessage(`❌ Time is required. Examples: \`9am\`, \`14:00\`, \`9:30am\``);
+      }
+
+      const parsed = parseTime(timeStr);
+      if (!parsed) {
+        return bot.sendMessage(`❌ Could not parse time \"${timeStr}\". Use formats like \`9am\`, \`14:00\`, \`9:30am\``);
+      }
+
+      // Validate source channel has RSS feeds
+      const { rssFeeds } = require('../database');
+      const allFeeds = rssFeeds.getActive ? rssFeeds.getActive() : [];
+      const sourceFeeds = allFeeds.filter(f => f.channel_id === sourceCode);
+
+      if (sourceFeeds.length === 0) {
+        return bot.sendMessage(
+          `❌ No active RSS feeds found in channel \`${sourceCode}\`.\n` +
+          `Add feeds with \`/rss add <url>\` in that channel first.`
+        );
+      }
+
+      // Validate destination channel is known
+      const channelManager = require('../channels');
+      const destToken = channelManager.getToken(destCode);
+      if (!destToken) {
+        return bot.sendMessage(
+          `❌ Destination channel \`${destCode}\` is not configured in this bot.\n` +
+          `Make sure it's in your \`WEBHOOK_TOKENS\` env var.`
+        );
+      }
+
+      const timeOfDay = `${String(parsed.hour).padStart(2,'0')}:${String(parsed.minute).padStart(2,'0')}`;
+      const result = rssDigests.add(sourceCode, destCode, frequency, dayOfWeek, timeOfDay, threshold, user);
+      const id = result.lastInsertRowid;
+
+      const sourceName = channelManager.getChannelName(sourceCode) || sourceCode;
+      const destName   = channelManager.getChannelName(destCode) || destCode;
+      const schedule   = frequency === 'weekly'
+        ? `every ${dayOfWeek} at ${timeStr}`
+        : `daily at ${timeStr}`;
+
+      return bot.sendMessage(
+        `✅ **RSS Digest Created** (ID: ${id})\n\n` +
+        `📰 Source: **${sourceName}** (${sourceFeeds.length} active feed${sourceFeeds.length !== 1 ? 's' : ''})\n` +
+        `📬 Destination: **${destName}**\n` +
+        `🕐 Schedule: ${schedule}\n` +
+        `📊 Minimum items: ${threshold}\n\n` +
+        `Use \`/${config.agentCommand} rss_digest run ${id}\` to test it now.`
+      );
+    }
+
+    case 'remove': {
+      const id = parseInt(parts[1]);
+      if (isNaN(id)) return bot.sendMessage(`❌ Usage: \`/${config.agentCommand} rss_digest remove <id>\``);
+      const digest = rssDigests.getById(id);
+      if (!digest) return bot.sendMessage(`❌ Digest ID ${id} not found.`);
+      rssDigests.remove(id);
+      return bot.sendMessage(`✅ Digest #${id} removed.`);
+    }
+
+    case 'list': {
+      const digests = rssDigests.getAll();
+      if (digests.length === 0) {
+        return bot.sendMessage(
+          `📊 **RSS Digests**\n\nNo digests configured.\n` +
+          `Add one with \`/${config.agentCommand} rss_digest add <threshold> <source> <dest> <frequency> [day] <time>\``
+        );
+      }
+      const channelManager = require('../channels');
+      const lines = digests.map(d => {
+        const src  = channelManager.getChannelName(d.source_channel_id) || d.source_channel_id;
+        const dest = channelManager.getChannelName(d.dest_channel_id) || d.dest_channel_id;
+        const sched = d.frequency === 'weekly'
+          ? `every ${d.day_of_week} at ${d.time_of_day}`
+          : `daily at ${d.time_of_day}`;
+        const lastRun = d.last_run ? new Date(d.last_run).toLocaleDateString() : 'never';
+        return `**[${d.id}]** ${src} → ${dest} | ${sched} | min ${d.min_items} items | last run: ${lastRun}`;
+      });
+      return bot.sendMessage(`📊 **RSS Digests (${digests.length})**\n\n${lines.join('\n')}`);
+    }
+
+    case 'run': {
+      const id = parseInt(parts[1]);
+      if (isNaN(id)) return bot.sendMessage(`❌ Usage: \`/${config.agentCommand} rss_digest run <id>\``);
+      const digest = rssDigests.getById(id);
+      if (!digest || !digest.active) return bot.sendMessage(`❌ Digest ID ${id} not found or inactive.`);
+
+      await bot.sendMessage(`⏳ Running digest #${id}...`);
+
+      const { collectItems, generateDigest: _gen } = require('./digest');
+      const items = collectItems(digest.source_channel_id, digest.frequency, null);
+
+      if (items.length === 0) {
+        return bot.sendMessage(`📊 Digest #${id}: No RSS items found in source channel.`);
+      }
+
+      if (items.length < digest.min_items) {
+        return bot.sendMessage(
+          `📊 Digest #${id}: Only ${items.length} item${items.length !== 1 ? 's' : ''} found (minimum: ${digest.min_items}).\n` +
+          `Skipping. Use a lower threshold or wait for more items.`
+        );
+      }
+
+      // Run manually via runDueDigests with forced=true workaround
+      // by temporarily setting last_run to null and forcing isDue
+      const channelManager = require('../channels');
+      const { generateDigest } = require('./digest');
+      const { getGlobalConfig } = require('./config');
+      const agentConfig = getGlobalConfig();
+
+      const sourceName = channelManager.getChannelName(digest.source_channel_id) || digest.source_channel_id;
+      const tz = process.env.TIMEZONE || 'UTC';
+      const dateStr = new Date().toLocaleDateString('en-US', { timeZone: tz, dateStyle: 'long' });
+
+      const summary = await generateDigest(items, sourceName, digest.frequency, agentConfig);
+      if (!summary) return bot.sendMessage(`❌ Digest generation failed — no response from Ollama.`);
+
+      const header = `📰 **${digest.frequency === 'weekly' ? 'Weekly' : 'Daily'} Digest — ${sourceName}** (${dateStr})\n\n`;
+      const footer = `\n\n_${items.length} items · Summarized by ${agentConfig.agentName}_`;
+
+      // Get the actual bot instance to send to dest channel
+      const botInstance = require('../index');
+      // Use channelManager token to send to dest
+      const token = channelManager.getToken(digest.dest_channel_id);
+      if (token) {
+        await botInstance.sendMessage(header + summary + footer, digest.dest_channel_id);
+      }
+
+      rssDigests.updateLastRun(id);
+      return bot.sendMessage(`✅ Digest #${id} sent successfully (${items.length} items).`);
+    }
+
+    default:
+      return bot.sendMessage(
+        `📊 **RSS Digest Commands** (admin only)\n\n` +
+        `\`/${config.agentCommand} rss_digest add <threshold> <source_code> <dest_code> <daily|weekly> [day] <time>\`\n` +
+        `\`/${config.agentCommand} rss_digest remove <id>\`\n` +
+        `\`/${config.agentCommand} rss_digest list\`\n` +
+        `\`/${config.agentCommand} rss_digest run <id>\` — test immediately`
+      );
+  }
+}
 
 function isAgentCommand(command) {
   const config = getGlobalConfig();
