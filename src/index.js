@@ -266,11 +266,18 @@ bot.on('command', async (data) => {
 **RSS Feeds:**
 \`/rss list\` - Show monitored feeds
 \`/rss add <url>\` - Add a feed (admin)
+\`/rss remove <id>\` - Remove a feed (admin)
+\`/rss pause <id>\` - Pause a feed (admin)
+\`/rss resume <id>\` - Resume a feed (admin)
 \`/rss check\` - Check for new items now (admin)
 
 **Calendar:**
-\`/calendar list\` - Upcoming events
+\`/calendar list\` - Upcoming events in this channel
+\`/calendar list all\` - All events across all channels (admin)
 \`/calendar add <date> <time> <title>\` - Create event (admin)
+\`/calendar view <id>\` - View event details
+\`/calendar edit <id> <field> <value>\` - Edit an event (admin)
+\`/calendar delete <id>\` - Delete an event (admin)
 \`/rsvp <id>\` - Toggle attendance
 
 **Custom Commands:**
