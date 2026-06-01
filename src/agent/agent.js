@@ -557,7 +557,7 @@ async function handleDigestCommand(bot, data, subcommand, config) {
 
       await bot.sendMessage(`⏳ Running digest #${id}...`);
 
-      const { collectItems, generateDigest: _gen } = require('./digest');
+      const { collectItems } = require('./digest');
       const items = collectItems(digest.source_channel_id, digest.frequency, null);
 
       if (items.length === 0) {

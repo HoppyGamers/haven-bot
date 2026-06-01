@@ -270,4 +270,5 @@ module.exports = {
   isDue,
   parseTime,
   collectItems,
+  generateDigest,
 };
