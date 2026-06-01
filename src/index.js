@@ -359,7 +359,9 @@ bot.on('command', async (data) => {
 // ---------------------------------------------------------------------------
 // Agent message event listener — handles mention/passive/active modes
 if (AGENT_ENABLED) {
+  console.log('[Agent] Registering message event listener');
   bot.on('message', async (msgData) => {
+    console.log('[Agent] Message listener fired:', msgData.content?.slice(0, 40));
     try {
       // Lazy load to avoid circular deps
       const agentMod    = require('./agent/agent');
