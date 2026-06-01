@@ -2,37 +2,19 @@
 // src/agent/ollama.js
 //
 // Handles communication with the Ollama API.
-// Sends conversation history + system prompt and returns the model's response.
+// Supports both plain chat and native tool/function calling.
 // ---------------------------------------------------------------------------
 
 const https = require('https');
 const http  = require('http');
 
 /**
- * Send a conversation to Ollama and return the assistant's response text.
- *
- * @param {object} params
- * @param {string} params.ollamaUrl  - Base URL e.g. http://192.168.50.6:11434
- * @param {string} params.model      - Model name e.g. qwen2.5:7b
- * @param {string} params.systemPrompt - System prompt defining agent persona
- * @param {Array}  params.messages   - Conversation history [{role, content}]
- * @returns {Promise<string>} - The assistant's response text
+ * Make a raw request to the Ollama /api/chat endpoint.
  */
-async function chat({ ollamaUrl, model, systemPrompt, messages }) {
+async function ollamaRequest(ollamaUrl, body) {
   const url = new URL('/api/chat', ollamaUrl);
 
-  const body = JSON.stringify({
-    model,
-    stream: false,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...messages,
-    ],
-    options: {
-      temperature: 0.7,
-      num_predict: 500,  // Keep responses concise for chat
-    },
-  });
+  const bodyStr = JSON.stringify(body);
 
   return new Promise((resolve, reject) => {
     const lib = url.protocol === 'https:' ? https : http;
@@ -44,7 +26,7 @@ async function chat({ ollamaUrl, model, systemPrompt, messages }) {
       method:   'POST',
       headers:  {
         'Content-Type':   'application/json',
-        'Content-Length': Buffer.byteLength(body),
+        'Content-Length': Buffer.byteLength(bodyStr),
       },
     }, (res) => {
       let data = '';
@@ -52,11 +34,8 @@ async function chat({ ollamaUrl, model, systemPrompt, messages }) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          if (parsed.error) {
-            reject(new Error(`Ollama error: ${parsed.error}`));
-          } else {
-            resolve(parsed.message?.content || '');
-          }
+          if (parsed.error) reject(new Error(`Ollama error: ${parsed.error}`));
+          else resolve(parsed);
         } catch (err) {
           reject(new Error(`Failed to parse Ollama response: ${err.message}`));
         }
@@ -64,18 +43,79 @@ async function chat({ ollamaUrl, model, systemPrompt, messages }) {
     });
 
     req.on('error', reject);
-    req.setTimeout(30000, () => {
-      req.destroy(new Error('Ollama request timed out after 30s'));
-    });
-
-    req.write(body);
+    req.setTimeout(60000, () => req.destroy(new Error('Ollama request timed out after 60s')));
+    req.write(bodyStr);
     req.end();
   });
 }
 
 /**
+ * Plain chat — no tools. Returns response text.
+ */
+async function chat({ ollamaUrl, model, systemPrompt, messages }) {
+  const result = await ollamaRequest(ollamaUrl, {
+    model,
+    stream: false,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ],
+    options: { temperature: 0.7, num_predict: 600 },
+  });
+
+  return result.message?.content || '';
+}
+
+/**
+ * Chat with native tool calling support.
+ * Returns { content, toolCalls } where toolCalls is an array of
+ * { name, arguments } objects if the model wants to call tools.
+ */
+async function chatWithTools({ ollamaUrl, model, systemPrompt, messages, tools }) {
+  // Convert our tool definitions to Ollama's format
+  const ollamaTools = tools.map(t => ({
+    type: 'function',
+    function: {
+      name:        t.name,
+      description: t.description,
+      parameters:  {
+        type:       'object',
+        properties: Object.fromEntries(
+          Object.entries(t.parameters || {}).map(([k, v]) => [k, {
+            type:        v.type || 'string',
+            description: v.description || '',
+          }])
+        ),
+        required: Object.entries(t.parameters || {})
+          .filter(([, v]) => v.required)
+          .map(([k]) => k),
+      },
+    },
+  }));
+
+  const result = await ollamaRequest(ollamaUrl, {
+    model,
+    stream: false,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ],
+    tools:   ollamaTools.length > 0 ? ollamaTools : undefined,
+    options: { temperature: 0.7, num_predict: 600 },
+  });
+
+  const message   = result.message || {};
+  const content   = message.content || '';
+  const toolCalls = (message.tool_calls || []).map(tc => ({
+    name:      tc.function?.name || tc.name,
+    arguments: tc.function?.arguments || tc.arguments || {},
+  }));
+
+  return { content, toolCalls };
+}
+
+/**
  * Check if Ollama is reachable and the configured model is available.
- * Returns { ok: true } or { ok: false, error: string }
  */
 async function healthCheck(ollamaUrl, model) {
   try {
@@ -96,7 +136,9 @@ async function healthCheck(ollamaUrl, model) {
     });
 
     const models = result.models || [];
-    const found  = models.some(m => m.name === model || m.name.startsWith(model.split(':')[0]));
+    const found  = models.some(m =>
+      m.name === model || m.name.startsWith(model.split(':')[0])
+    );
 
     if (!found) {
       const available = models.map(m => m.name).join(', ') || 'none';
@@ -109,4 +151,4 @@ async function healthCheck(ollamaUrl, model) {
   }
 }
 
-module.exports = { chat, healthCheck };
+module.exports = { chat, chatWithTools, healthCheck };

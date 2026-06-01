@@ -6,7 +6,7 @@
 // ---------------------------------------------------------------------------
 
 const { getGlobalConfig, getChannelConfig, isEnabledForChannel } = require('./config');
-const { chat, healthCheck } = require('./ollama');
+const { chat, chatWithTools, healthCheck } = require('./ollama');
 const { initAgentDatabase, conversations, memory, agentChannels } = require('./database');
 const {
   detectRemember,
@@ -16,7 +16,7 @@ const {
   formatMemoriesForDisplay,
 } = require('./memory');
 const { search, likelyNeedsSearch } = require('./search');
-const { formatToolsForPrompt, parseToolCall, executeTool } = require('./tools');
+const { TOOL_DEFINITIONS, executeTool } = require('./tools');
 
 let agentDb = null;
 
@@ -210,10 +210,6 @@ async function handleAgentCommand(bot, data) {
       `If the results contain the answer, use them. Do not say you lack real-time data.`;
   }
 
-  // Add tool definitions to system prompt
-  const toolPrompt = formatToolsForPrompt();
-  const finalSystemPrompt = systemPrompt + toolPrompt;
-
   const thinkingMsg = await bot.sendMessage(`_${config.agentName} is thinking..._`);
   const thinkingId  = thinkingMsg?.message_id || null;
 
@@ -224,57 +220,69 @@ async function handleAgentCommand(bot, data) {
   };
 
   try {
-    let response = await chat({
+    // Use native tool calling
+    const { content: firstContent, toolCalls } = await chatWithTools({
       ollamaUrl:    config.ollamaUrl,
       model:        config.ollamaModel,
-      systemPrompt: finalSystemPrompt,
+      systemPrompt,
       messages,
+      tools:        TOOL_DEFINITIONS,
     });
 
-    // Check if Ollama wants to call a tool
-    const toolCall = parseToolCall(response);
-    if (toolCall) {
-      console.log(`[Agent] Tool call: ${toolCall.tool}`, toolCall.args);
+    let finalResponse = firstContent;
 
-      const toolResult = await executeTool(toolCall.tool, toolCall.args, {
-        bot,
-        channelId: channel_id,
-        userId:    user_id,
-        username:  user,
-        timezone:  process.env.TIMEZONE,
-      });
+    // Execute tool calls if the model requested any
+    if (toolCalls && toolCalls.length > 0) {
+      const toolMessages = [...messages];
 
-      console.log(`[Agent] Tool result: ${toolResult.slice(0, 100)}`);
+      if (firstContent) {
+        toolMessages.push({ role: 'assistant', content: firstContent });
+      }
 
-      // Send tool result back to Ollama for a natural language response
-      const followUpMessages = [
-        ...messages,
-        { role: 'assistant', content: response },
-        { role: 'user',      content: `Tool result for ${toolCall.tool}: ${toolResult}` },
-      ];
+      for (const tc of toolCalls) {
+        console.log(`[Agent] Tool call: ${tc.name}`, tc.arguments);
 
-      response = await chat({
+        const toolResult = await executeTool(tc.name, tc.arguments, {
+          bot,
+          channelId: channel_id,
+          userId:    user_id,
+          username:  user,
+          timezone:  process.env.TIMEZONE,
+        });
+
+        console.log(`[Agent] Tool result: ${toolResult.slice(0, 100)}`);
+
+        // Add tool result to messages for follow-up
+        toolMessages.push({
+          role:    'tool',
+          content: toolResult,
+          name:    tc.name,
+        });
+      }
+
+      // Get natural language response after tool execution
+      const { content: followUpContent } = await chatWithTools({
         ollamaUrl:    config.ollamaUrl,
         model:        config.ollamaModel,
-        systemPrompt: systemPrompt,
-        messages:     followUpMessages,
+        systemPrompt,
+        messages:     toolMessages,
+        tools:        [],
       });
+
+      finalResponse = followUpContent || firstContent;
     }
 
     await deleteThinking();
 
-    if (!response || !response.trim()) {
+    if (!finalResponse || !finalResponse.trim()) {
       await bot.sendMessage(`❌ **${config.agentName}**: No response from model. Try again.`);
       return;
     }
 
-    // Strip any leftover TOOL_CALL lines from the response
-    const cleanResponse = response.replace(/TOOL_CALL:\s*\{[\s\S]*?\}/g, '').trim();
-
-    conversations.add(channel_id, 'assistant', cleanResponse);
+    conversations.add(channel_id, 'assistant', finalResponse);
     conversations.trim(channel_id, config.historySize);
 
-    await bot.sendMessage(`**${config.agentName}:** ${cleanResponse}`);
+    await bot.sendMessage(`**${config.agentName}:** ${finalResponse}`);
 
   } catch (err) {
     await deleteThinking();

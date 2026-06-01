@@ -195,45 +195,7 @@ async function executeTool(toolName, args, context) {
   }
 }
 
-/**
- * Format tool definitions for injection into the system prompt.
- * Tells Ollama what tools are available and when to use them.
- */
-function formatToolsForPrompt(availableTools = TOOL_DEFINITIONS) {
-  const lines = availableTools.map(t => {
-    const params = Object.entries(t.parameters || {})
-      .map(([k, v]) => `  - ${k}: ${v.description}${v.required ? ' (required)' : ''}`)
-      .join('\n');
-    return `Tool: ${t.name}\nDescription: ${t.description}${params ? '\nParameters:\n' + params : ''}`;
-  });
-
-  return (
-    `\n\nAVAILABLE TOOLS:\n` +
-    `When you need to take an action or fetch live data, respond with a tool call in this exact format:\n` +
-    `TOOL_CALL: {"tool": "tool_name", "args": {"param": "value"}}\n\n` +
-    lines.join('\n\n')
-  );
-}
-
-/**
- * Parse a tool call from an Ollama response.
- * Returns { tool, args } or null if no tool call found.
- */
-function parseToolCall(response) {
-  const match = response.match(/TOOL_CALL:\s*(\{[\s\S]*?\})/);
-  if (!match) return null;
-
-  try {
-    const parsed = JSON.parse(match[1]);
-    return { tool: parsed.tool, args: parsed.args || {} };
-  } catch {
-    return null;
-  }
-}
-
 module.exports = {
   TOOL_DEFINITIONS,
   executeTool,
-  formatToolsForPrompt,
-  parseToolCall,
 };
