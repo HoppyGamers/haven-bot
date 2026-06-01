@@ -186,6 +186,10 @@ async function handleAgentCommand(bot, data) {
   const memoryContext = getMemoryContext(user_id, channel_id);
   let systemPrompt    = config.systemPrompt + memoryContext;
 
+  // Add explicit tool use instruction to system prompt
+  const toolInstruction = `\n\nIMPORTANT: You have access to tools. Use them when appropriate:\n- Use list_calendar_events when asked about upcoming events or schedule\n- Use create_calendar_event when asked to add/create/schedule an event\n- Use get_leaderboard when asked about rankings, top users, or XP standings\n- Use get_datetime when asked about current time or date\n- Use play_sound when asked to play a sound\n- Use list_rss_feeds when asked about news feeds\nAlways use tools instead of guessing when the information can come from a tool.`;
+  systemPrompt = systemPrompt + toolInstruction;
+
   // Web search — run if SearXNG is configured and message likely needs current info
   let searchContext = '';
   if (config.searxngUrl && likelyNeedsSearch(userMessage)) {

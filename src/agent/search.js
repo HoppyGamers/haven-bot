@@ -86,14 +86,25 @@ async function healthCheck(searxngUrl) {
  * Used as a pre-filter before asking Ollama to decide.
  */
 function likelyNeedsSearch(message) {
+  // Skip search for queries that should be handled by tools instead
+  const toolQueries = [
+    /\b(leaderboard|top users?|who.s (at the top|winning)|most xp|rankings?)\b/i,
+    /\b(upcoming events?|what.s (on|scheduled)|calendar|events? (in|for) this channel)\b/i,
+    /\b(what time is it|current time|what.s the date|today.s date)\b/i,
+    /\b(rss feeds?|news feeds?|what feeds?)\b/i,
+    /\b(play (a )?sound|soundboard)\b/i,
+    /\b(add|create|schedule) .*(event|calendar|reminder)\b/i,
+  ];
+
+  if (toolQueries.some(p => p.test(message))) return false;
+
   const searchIndicators = [
     /\b(latest|recent|current|today|yesterday|this week|last week|this season|last season)\b/i,
-    /\b(news|results?|score|winner|standings?|schedule|calendar|upcoming)\b/i,
-    /\b(who won|what happened|when is|where is|how many|what time)\b/i,
+    /\b(news|results?|score|winner|standings?)\b/i,
+    /\b(who won|what happened|when is|where is|how many)\b/i,
     /\b(patch notes?|update|release|announce|launch)\b/i,
     /\b(weather|price|stock|trending)\b/i,
     /\b(race results?|grand prix|qualifying|championship)\b/i,
-    /\?$/,
   ];
 
   return searchIndicators.some(pattern => pattern.test(message));
