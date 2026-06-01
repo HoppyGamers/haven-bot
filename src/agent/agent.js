@@ -201,7 +201,12 @@ async function handleAgentCommand(bot, data) {
 
   // Inject search results as additional context if available
   if (searchContext) {
-    systemPrompt += `\n\nCurrent web search results for context (use these to answer accurately, cite sources when helpful):\n${searchContext}`;
+    systemPrompt +=
+      `\n\nWEB SEARCH RESULTS (current, real-time data — today is ${new Date().toDateString()}):\n` +
+      `${searchContext}\n\n` +
+      `IMPORTANT: Use the above search results to answer the question. ` +
+      `These results are current and override your training data. ` +
+      `If the results contain the answer, use them. Do not say you lack real-time data.`;
   }
 
   const thinkingMsg = await bot.sendMessage(`_${config.agentName} is thinking..._`);
