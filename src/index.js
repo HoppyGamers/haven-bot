@@ -309,6 +309,11 @@ bot.on('command', async (data) => {
       break;
 
     default: {
+      // Check if this is the agent command
+      if (AGENT_ENABLED && agentModule && agentModule.isAgentCommand(command)) {
+        await agentModule.handleAgentCommand(channelBot, enrichedData);
+        break;
+      }
       // Check if it's a custom command before reporting unknown
       const customCmd = customCommandsDb.get(command);
       if (customCmd) {
@@ -346,6 +351,12 @@ bot.on('error', (err) => {
 // ---------------------------------------------------------------------------
 async function main() {
   await bot.init();
+
+  // Load agent if enabled
+  if (AGENT_ENABLED) {
+    agentModule = require('./agent/index');
+    await agentModule.initAgent(bot, channelManager);
+  }
 
   // Start notification runner
   startNotifier(bot);
