@@ -4,6 +4,23 @@ A fully featured community bot for [Haven](https://github.com/ancsemi/Haven) sel
 
 ## Features
 
+### 🌐 Web Dashboard
+- Browser-based admin panel on port 3003
+- Token authentication via `/dashboard token`
+- Read: overview, health, users, calendar, RSS, moderation log, AI agent stats
+- Write: create/edit/delete events, manage RSS feeds, add/remove channels, update settings
+- Settings apply immediately without restart
+
+### 🤖 AI Agent (Optional)
+- **Natural language interface** — chat with the AI Agent using a configurable slash command (e.g. `/bob`)
+- **Web search** — answers grounded in real-time results via SearXNG
+- **Persistent memory** — remembers facts across conversations and restarts
+- **Conversation history** — multi-turn context so the agent follows long discussions
+- **Tool integration** — agent can create calendar events, fetch leaderboards, play sounds, and list RSS feeds
+- **Participation modes** — `command`, `mention`, `passive`, or `active`
+- **Per-channel personas** — different name, prompt, and mode per channel at runtime
+- **Powered by Ollama** — runs locally, no cloud dependencies
+
 ### 📊 User Profiles & XP
 - Global XP pool across all channels
 - Leveling system with level-up announcements
@@ -44,16 +61,6 @@ A fully featured community bot for [Haven](https://github.com/ancsemi/Haven) sel
 - Each channel gets its own bot webhook, all handled by a single process
 - Commands reply to the channel they were issued in
 - RSS feeds and calendar reminders post to the channel they were configured in
-
-### 🤖 AI Agent (Optional)
-- **Natural language interface** — chat with the AI Agent using a configurable slash command (e.g. `/bob`)
-- **Powered by Ollama** — runs locally, no cloud dependencies
-- **Web search** — answers grounded in real-time results via SearXNG
-- **Persistent memory** — remembers facts across conversations and restarts
-- **Conversation history** — multi-turn context so the agent follows long discussions
-- **Tool integration** — agent can create calendar events, fetch leaderboards, play sounds, and list RSS feeds
-- **Participation modes** — `command`, `mention`, `passive`, or `active`
-- **Per-channel personas** — different name, prompt, and mode per channel at runtime
 
 ---
 
@@ -170,6 +177,36 @@ Set per-channel with `/bob config set-mode <mode>`:
 
 ---
 
+## Web Dashboard
+
+Access the dashboard at `http://your-server:3003` after setting `DASHBOARD_SECRET` in `.env`.
+
+### Setup
+
+1. Generate a secret key:
+```bash
+openssl rand -base64 48
+```
+
+2. Add to `.env`:
+```env
+DASHBOARD_SECRET=<your-generated-secret>
+DASHBOARD_PORT=3003
+```
+
+3. Restart the bot
+
+4. Generate a login token in Haven:
+```
+/dashboard token
+```
+
+⚠️ The token is posted publicly in the channel — use it immediately and delete the message. Haven does not yet support private bot messages.
+
+5. Visit `http://your-server:3003` and paste the token
+
+---
+
 ## Docker
 
 ```bash
@@ -208,6 +245,9 @@ src/
 ├── rss.js              — RSS fetcher and poller
 ├── setup.js            — Interactive setup wizard
 ├── achievements.js     — Achievement definitions and engine
+├── dashboard/          — Web dashboard
+│   ├── server.js       — HTTP server, auth, API routes
+│   └── public/         — Static HTML/CSS/JS
 ├── agent/              — AI Agent (loaded only when AGENT_ENABLED=true)
 │   ├── agent.js        — Main agent handler, tool orchestration
 │   ├── config.js       — Global/channel config resolution

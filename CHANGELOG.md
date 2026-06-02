@@ -4,6 +4,74 @@ All notable changes to Haven Bot are documented here.
 
 ---
 
+## [1.6.0] — 2026-06-03
+
+### Added
+- **Web Dashboard (Phase 5)** — browser-based admin panel on port 3003
+  - Token-based authentication via `/dashboard token` slash command
+  - Overview page — bot status, uptime, channel list, live service health
+  - Users page — XP leaderboard, total users, total XP, achievement count
+  - Calendar page — upcoming events with notification status and RSVP counts
+  - RSS Feeds page — all feeds with item counts and last item title
+  - Moderation Log page — recent actions with unban button
+  - AI Agent Stats page — conversation counts, memory, tool usage chart, recent tool log
+  - Settings page — runtime config (bot name, timezone, delete timers, RSS intervals) applied without restart
+  - Write actions: create/edit/delete calendar events, add/remove/pause RSS feeds, add/remove channels, unban users
+- **Runtime channel management** — add/remove channels without restart
+  - `/addchannel <name> <code> <token>` — add a channel at runtime
+  - `/removechannel <code>` — remove a DB-managed channel
+  - `/channels` — list all configured channels with source indicator
+  - Channels persist across restarts in `bot_channels` table
+- **Fast startup** — slash command registration skipped on restart if commands unchanged
+  - MD5 hash of command list + channels stored in `bot_settings` table
+  - Subsequent restarts boot in seconds instead of 2+ minutes
+  - Hash invalidates automatically when commands or channels change
+
+### Fixed
+- RSS duplicate posting — `item_title` column migration was missing, causing `markSeen` to fail silently
+- `/rss check` now posts items to each feed's configured channel instead of the command channel
+- Passive/mention mode no longer responds to slash commands (prevented duplicate responses)
+- Calendar notifications now store `notify_at` in SQLite datetime format (was ISO format, broke comparisons)
+- File upload paths no longer trigger unknown command errors
+- Dashboard health page `process.env` reference removed from browser JS
+- Duplicate API routes in dashboard server removed
+
+### Changed
+- `.env.example` rewritten — cleaner sections, bootstrap vs runtime channel explanation, all new vars documented
+- `/calendar` help expanded with date format examples and notify offset explanation
+- `/rss list` now shows which channel each feed posts to
+- Auto-delete timers split into three categories: `HELP_DELETE_SECONDS`, `ADMIN_DELETE_SECONDS`, `USER_DELETE_SECONDS`
+
+---
+
+## [1.5.0] — 2026-06-02
+
+### Added
+- **RSS Digest (Phase 4A)** — scheduled AI summaries of RSS feed content
+  - `/bob rss_digest add <threshold> <source_code> <dest_code> <daily|weekly> [day] <time>`
+  - Collects real article titles from `rss_seen`, summarizes via Ollama
+  - Prevents hallucination — prompt explicitly instructs use of real titles only
+  - `/bob rss_digest list`, `run`, `remove` commands
+  - Scheduler runs every 30 minutes
+- **AI Event Briefing (Phase 4B)** — AI-enhanced calendar reminders
+  - Fires alongside every calendar notification when agent is enabled
+  - Searches SearXNG for current context about the event title
+  - Adapts to any event type — races, game releases, movies, etc.
+  - Non-blocking — plain reminder fires regardless of briefing success
+- **Tool call logging** — all agent tool calls logged to `tool_log` table in `haven-agent.db`
+- **English language enforcement** — agent always responds in English regardless of message language
+- **`/bob help`** — full AI Agent command reference, respects `HELP_DELETE_SECONDS`
+- **AI Agent section in `/help`** — shown only when `AGENT_ENABLED=true`
+
+### Fixed
+- Skipped RSS items no longer reappear — flood-limited items marked seen immediately
+- Agent participation modes (mention/passive/active) now work correctly
+- Passive mode responds to replies when Bob's last message was a question
+- `/bob config disable` — agent can now be re-enabled after disabling (config commands bypass enabled check)
+- Mention mode uses full agent name match to prevent false positives
+
+---
+
 ## [1.4.0] — 2026-06-01
 
 ### Added
