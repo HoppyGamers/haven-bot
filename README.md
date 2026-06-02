@@ -21,6 +21,18 @@ A fully featured community bot for [Haven](https://github.com/ancsemi/Haven) sel
 - **Per-channel personas** — different name, prompt, and mode per channel at runtime
 - **Powered by Ollama** — runs locally, no cloud dependencies
 
+
+### 🎲 RPG System (Optional)
+- **Channel-based campaigns** — each Haven channel runs its own independent RPG campaign
+- **5 game systems** — D&D 5e, Star Wars, Cyberpunk, Sci-Fi, Horror
+- **Natural language play** — `dmbob ACTION I attack the goblin` for committed moves, `dmbob <question>` for OOC
+- **Automatic dice rolls** — attack, stealth, perception, and more inferred from action text
+- **Character creation** — rolled stats, class HP, AC, inventory, and conditions
+- **Persistent game state** — campaigns survive restarts, full session history logged
+- **AI Dungeon Master** — powered by Ollama, responds to every action with vivid narration
+- **Session recaps** — `dmbob rpg recap` generates a dramatic "previously on..." summary
+- **Powered by Ollama** — fully local, no cloud dependencies
+
 ### 📊 User Profiles & XP
 - Global XP pool across all channels
 - Leveling system with level-up announcements
@@ -177,6 +189,84 @@ Set per-channel with `/bob config set-mode <mode>`:
 
 ---
 
+
+## RPG System
+
+Enable the RPG system by adding `RPG_ENABLED=true` to `.env`. Requires `AGENT_ENABLED=true`.
+
+### Quick Start
+
+1. Enable in `.env`:
+```env
+RPG_ENABLED=true
+AGENT_ENABLED=true
+AGENT_NAME=Bob
+```
+
+2. Set up a campaign in any Haven channel:
+```
+bob rpg setup Curse of Strahd dnd5e
+```
+
+3. Players join with characters:
+```
+bob rpg join Aesmodien Fighter Elf
+```
+
+4. DM starts the campaign:
+```
+bob rpg start
+```
+
+5. Play:
+```
+bob ACTION I push open the tavern door and step inside
+bob what do I see?
+bob roll 1d20
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `bob rpg setup <name> [system]` | Create a campaign in this channel |
+| `bob rpg join <name> <class> <race>` | Join with a character |
+| `bob rpg start` | Begin the campaign (DM only) |
+| `bob rpg status` | Party HP and current status |
+| `bob rpg sheet` | Your character sheet |
+| `bob rpg inventory` | Your inventory |
+| `bob rpg recap` | AI-generated session recap |
+| `bob rpg pause / resume` | Freeze/unfreeze the game (DM only) |
+| `bob rpg systems` | List available game systems |
+| `bob rpg help` | Full command reference |
+| `bob ACTION <action>` | Committed in-game move |
+| `bob <question>` | OOC question to the DM |
+| `bob roll <dice>` | Roll dice (1d20, 2d6+3, adv, dis) |
+
+### Game Systems
+
+| Key | Name | Description |
+|-----|------|-------------|
+| `dnd5e` | D&D 5e | Classic fantasy — swords, sorcery, dungeon crawling |
+| `starwars` | Star Wars | Jedi, smugglers, bounty hunters, and the Force |
+| `cyberpunk` | Cyberpunk | Neon dystopia — hackers, mercs, and corporate espionage |
+| `scifi` | Sci-Fi | Gritty far-future space opera (The Expanse / Mass Effect) |
+| `horror` | Horror | Survival investigation with Sanity mechanic (Call of Cthulhu) |
+
+### How It Works
+
+**ACTION vs OOC:**
+- `bob ACTION I draw my sword and charge the guard` — committed move, DM narrates result, dice rolled automatically
+- `bob what does the guard look like?` — out-of-character question, answered without advancing the scene
+- Player-to-player chat is ignored by the DM
+
+**Dice:**
+- Actions auto-infer roll type (attack, stealth, persuasion, etc.) based on keywords
+- Manual rolls: `bob roll 1d20`, `bob roll 2d6+3`, `bob roll adv` (advantage), `bob roll 4d6kh3` (keep highest 3)
+
+**Database:** `haven-rpg.db` — separate from `haven-bot.db` and `haven-agent.db`
+
+---
 ## Web Dashboard
 
 Access the dashboard at `http://your-server:3003` after setting `DASHBOARD_SECRET` in `.env`.

@@ -13,7 +13,6 @@ const channelManager     = require('./channels');
 // Agent — loaded only when AGENT_ENABLED=true
 const AGENT_ENABLED = (process.env.AGENT_ENABLED || 'false').toLowerCase() === 'true';
 const DASHBOARD_ENABLED = !!process.env.DASHBOARD_SECRET;
-const RPG_ENABLED = (process.env.RPG_ENABLED || 'false').toLowerCase() === 'true';
 
 // ---------------------------------------------------------------------------
 // Auto-delete helpers
@@ -420,13 +419,6 @@ bot.on('command', async (data) => {
           `*(Powered by ${config.ollamaModel} via Ollama)*`
         : '';
 
-      const rpgSection = RPG_ENABLED && AGENT_ENABLED
-        ? `\n\n**RPG System:**\n` +
-          `\`${agentName} rpg help\` - RPG commands and how to play\n` +
-          `\`${agentName} rpg setup <name> [system]\` - Start a campaign in this channel\n` +
-          `*(Systems: dnd5e, starwars, scifi, horror)*`
-        : '';
-
       const helpText = `
 🤖 **Haven Bot Help**
 
@@ -486,7 +478,7 @@ bot.on('command', async (data) => {
 
 **Fun:**
 \`/ping\` - Test the bot
-\`/help\` - This message${agentSection}${rpgSection}
+\`/help\` - This message${agentSection}
       `.trim();
 
       const helpDeleteSecs = parseInt(process.env.HELP_DELETE_SECONDS || '0', 10);
@@ -516,13 +508,9 @@ bot.on('command', async (data) => {
       if (customCmd) {
         await customCommands.executeCustomCommand(channelBot, enrichedData, customCmd);
       } else {
-        const unknownMsg = await channelBot.sendMessage(
+        await channelBot.sendMessage(
           `❓ Unknown command: \`/${command}\`. Type \`/help\` for available commands.`
         );
-        const helpSecs = parseInt(process.env.HELP_DELETE_SECONDS || '0', 10);
-        if (helpSecs > 0 && unknownMsg?.message_id) {
-          setTimeout(() => channelBot.deleteMessage(unknownMsg.message_id).catch(() => {}), helpSecs * 1000);
-        }
       }
     }
   }
@@ -593,28 +581,6 @@ if (AGENT_ENABLED) {
         }
       });
 
-      // Check if this is an RPG message before passing to agent
-      if (RPG_ENABLED) {
-        const { parseMessage, handleCommand, handleAction, handleQuestion } = require('./rpg/engine');
-        const agentConf = require('./agent/config').getChannelConfig(channel_id, agentDb);
-        const parsed = parseMessage(content, agentConf.agentName, user_id);
-        if (parsed.type === 'command') {
-          return handleCommand(channelBot, channel_id, user_id, user, parsed.command, agentConf);
-        }
-        if (parsed.type === 'action') {
-          return handleAction(channelBot, channel_id, user_id, user, parsed.content, agentConf);
-        }
-        if (parsed.type === 'roll') {
-          const { roll, formatRoll } = require('./rpg/dice');
-          const result = roll(parsed.expression);
-          return channelBot.sendMessage(formatRoll(result, `${user} rolls`));
-        }
-        if (parsed.type === 'question') {
-          return handleQuestion(channelBot, channel_id, user_id, user, parsed.content, agentConf);
-        }
-        // type === 'ignore' — not directed at DM, fall through to normal agent
-      }
-
       // Route to agent handler
       await agentMod.handleAgentCommand(channelBot, {
         user,
@@ -643,13 +609,6 @@ async function main() {
 
   // Load runtime-added channels from database
   channelManager.loadFromDatabase();
-
-  // Init RPG database if enabled
-  if (RPG_ENABLED) {
-    const { initRpgDatabase } = require('./rpg/database');
-    initRpgDatabase();
-    console.log('⚔️ RPG system enabled');
-  }
 
   // Load agent if enabled
   if (AGENT_ENABLED) {

@@ -11,7 +11,7 @@ const http  = require('http');
 /**
  * Make a raw request to the Ollama /api/chat endpoint.
  */
-async function ollamaRequest(ollamaUrl, body) {
+async function ollamaRequest(ollamaUrl, body, timeoutMs = 60000) {
   const url = new URL('/api/chat', ollamaUrl);
 
   const bodyStr = JSON.stringify(body);
@@ -43,7 +43,7 @@ async function ollamaRequest(ollamaUrl, body) {
     });
 
     req.on('error', reject);
-    req.setTimeout(60000, () => req.destroy(new Error('Ollama request timed out after 60s')));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`Ollama request timed out after ${timeoutMs/1000}s`)));
     req.write(bodyStr);
     req.end();
   });
@@ -52,7 +52,7 @@ async function ollamaRequest(ollamaUrl, body) {
 /**
  * Plain chat — no tools. Returns response text.
  */
-async function chat({ ollamaUrl, model, systemPrompt, messages }) {
+async function chat({ ollamaUrl, model, systemPrompt, messages, timeoutMs = 60000 }) {
   const result = await ollamaRequest(ollamaUrl, {
     model,
     stream: false,

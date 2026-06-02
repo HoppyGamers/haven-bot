@@ -4,6 +4,51 @@ All notable changes to Haven Bot are documented here.
 
 ---
 
+## [1.7.0] — 2026-06-03
+
+### Added
+- **Haven RPG System** — full text-based RPG engine powered by Ollama
+  - Channel-based campaigns — each Haven channel runs its own independent campaign
+  - 5 game systems: `dnd5e`, `starwars`, `cyberpunk`, `scifi`, `horror`
+  - Committed action detection — `dmbob ACTION <what you do>` triggers narration and dice rolls
+  - OOC question handling — `dmbob <question>` gets DM answers without advancing the scene
+  - Automatic dice inference — attack, stealth, persuasion, perception, athletics checks auto-rolled
+  - Manual dice rolls — `dmbob roll 1d20`, `2d6+3`, `4d6kh3`, `adv`, `dis`
+  - Character creation with rolled stats (4d6 drop lowest), class HP, and AC
+  - Party status tracking — HP bars, conditions, inventory per character
+  - Game log persistence — full session history stored in `haven-rpg.db`
+  - AI-generated session recaps — `dmbob rpg recap`
+  - Campaign management — setup, join, start, pause, resume
+  - Stage direction filtering — "ACTION:" and "Narrator:" labels automatically stripped from DM output
+- **D&D 5e System** — full class and race roster with descriptions
+  - 12 classes: Fighter, Wizard, Rogue, Cleric, Ranger, Paladin, Barbarian, Bard, Druid, Monk, Sorcerer, Warlock
+  - 9 races: Human, Elf, Dwarf, Halfling, Gnome, Half-Orc, Half-Elf, Tiefling, Dragonborn
+- **Star Wars System** — expanded from original implementation
+  - 12 classes: Jedi, Rebel Soldier, Smuggler, Bounty Hunter, Pilot, Force Sensitive, Diplomat, Imperial Officer, Droid, Mandalorian, Scoundrel, Medic
+  - 10 races including Twilek, Wookiee, Togruta, Mirialan
+  - Full Force rules (Light/Dark side, Control/Sense/Alter), weapon damage values, Dark Side Points
+- **Cyberpunk System** — new system
+  - 10 classes: Netrunner, Solo, Nomad, Fixer, Techie, Rockerboy, Medtech, Corpo, Cop (Ex), Edgerunner
+  - Hacking mechanics: Ghost Run vs Brute Force, ICE ratings, cyberspace consequences
+  - Humanity score — cyberware costs humanity, 0 = cyberpsychosis
+  - Blade Runner/Cyberpunk 2077 tone and street slang
+- **Sci-Fi System** — gritty far-future space opera (The Expanse / Mass Effect tone)
+- **Horror System** — survival horror investigation with Sanity mechanic (Call of Cthulhu lite)
+- **RPG section in `/help`** — shown when `RPG_ENABLED=true`
+- **`dmbob rpg systems`** — lists all available systems with descriptions
+- **`dmbob rpg setup`** (no args) — shows systems overview with sample classes
+- **`dmbob rpg setup <name> <system>`** — now shows full class and race list with descriptions after creation
+
+### Fixed
+- DM responses no longer include "ACTION:" stage directions or "Narrator:" labels
+- Ollama timeout increased to 120s for RPG calls (larger context than standard agent queries)
+- userId type coercion — Haven sends user_id as number, RPG DB stores as TEXT
+
+### Changed
+- RPG prompts include explicit NEVER rules for all 5 systems to prevent meta-instruction leakage
+
+---
+
 ## [1.6.0] — 2026-06-03
 
 ### Added
