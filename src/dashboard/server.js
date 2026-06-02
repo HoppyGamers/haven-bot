@@ -220,6 +220,25 @@ async function getApiData(pathname, session, bot, channelManager) {
     }
   }
 
+  if (pathname === '/api/settings') {
+    const settingsKeys = [
+      'BOT_NAME', 'TIMEZONE', 'HELP_DELETE_SECONDS',
+      'ADMIN_DELETE_SECONDS', 'USER_DELETE_SECONDS',
+      'RSS_CHECK_INTERVAL', 'RSS_MAX_ITEMS',
+    ];
+    // Load from DB overrides first, fall back to process.env
+    let dbSettings = {};
+    try {
+      const rows = db.prepare('SELECT key, value FROM bot_settings WHERE key != ?').all('cmd_reg_hash');
+      rows.forEach(r => { dbSettings[r.key] = r.value; });
+    } catch {}
+    const settings = {};
+    for (const key of settingsKeys) {
+      settings[key] = dbSettings[key] ?? process.env[key] ?? '';
+    }
+    return { settings };
+  }
+
   if (pathname === '/api/health') {
 
     const pingOllama = () => new Promise(resolve => {
@@ -253,6 +272,172 @@ async function getApiData(pathname, session, bot, channelManager) {
       searxng,
       bot: { ok: true, uptime: Math.floor(process.uptime()) },
     };
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Write API handlers
+// ---------------------------------------------------------------------------
+
+async function handleWriteApi(pathname, method, payload, session, bot, channelManager) {
+  const { calendar, rssFeeds, bans, db: botDb } = require('../database');
+  const tz = process.env.TIMEZONE || 'UTC';
+
+  // ── Calendar ────────────────────────────────────────────────────────────────
+
+  if (pathname === '/api/calendar' && method === 'POST') {
+    const { title, date, time, notify } = payload;
+    if (!title || !date || !time) return { error: 'title, date and time are required' };
+
+    const combined = `${date}T${time}:00`;
+    const eventUtc = new Date(combined).toISOString();
+    if (new Date(eventUtc) <= new Date()) return { error: 'Event date must be in the future' };
+
+    const eventId = calendar.createEvent(title, eventUtc, payload.channel_id || null, session.username);
+
+    // Add notifications
+    const offsets = notify || ['1d', '6h', '30m'];
+    const parseOffset = o => {
+      const n = parseInt(o); const u = o.slice(-1);
+      if (u === 'd') return n * 86400000;
+      if (u === 'h') return n * 3600000;
+      if (u === 'm') return n * 60000;
+      return 0;
+    };
+    const eventTime = new Date(eventUtc);
+    for (const offset of offsets) {
+      const ms = parseOffset(offset);
+      if (!ms) continue;
+      const notifyAt = new Date(eventTime.getTime() - ms);
+      if (notifyAt > new Date()) {
+        const sqliteDate = notifyAt.toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+        calendar.addNotification(eventId, sqliteDate, offset);
+      }
+    }
+    return { ok: true, id: eventId, message: `Event "${title}" created` };
+  }
+
+  if (pathname.startsWith('/api/calendar/') && method === 'DELETE') {
+    const id = parseInt(pathname.split('/').pop());
+    if (isNaN(id)) return { error: 'Invalid event ID' };
+    botDb.prepare('DELETE FROM event_notifications WHERE event_id = ?').run(id);
+    botDb.prepare('DELETE FROM event_rsvps WHERE event_id = ?').run(id);
+    botDb.prepare('DELETE FROM events WHERE id = ?').run(id);
+    return { ok: true, message: `Event #${id} deleted` };
+  }
+
+  if (pathname.startsWith('/api/calendar/') && method === 'POST') {
+    const id = parseInt(pathname.split('/').pop());
+    if (isNaN(id)) return { error: 'Invalid event ID' };
+    const { title, date, time } = payload;
+    if (!title && !date && !time) return { error: 'Nothing to update' };
+    if (title) botDb.prepare('UPDATE events SET title = ? WHERE id = ?').run(title, id);
+    if (date && time) {
+      const eventUtc = new Date(`${date}T${time}:00`).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '');
+      botDb.prepare('UPDATE events SET event_time = ? WHERE id = ?').run(eventUtc, id);
+    }
+    return { ok: true, message: `Event #${id} updated` };
+  }
+
+  // ── RSS ──────────────────────────────────────────────────────────────────────
+
+  if (pathname === '/api/rss' && method === 'POST') {
+    const { url, channel_id, filter } = payload;
+    if (!url) return { error: 'URL is required' };
+    try {
+      const result = rssFeeds.add(url, session.username, filter || null, channel_id || null);
+      return { ok: true, id: result.lastInsertRowid, message: `Feed added` };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  if (pathname.startsWith('/api/rss/') && method === 'DELETE') {
+    const id = parseInt(pathname.split('/').pop());
+    if (isNaN(id)) return { error: 'Invalid feed ID' };
+    rssFeeds.remove(id);
+    return { ok: true, message: `Feed #${id} removed` };
+  }
+
+  if (pathname.startsWith('/api/rss/') && method === 'POST') {
+    const id = parseInt(pathname.split('/').pop());
+    if (isNaN(id)) return { error: 'Invalid feed ID' };
+    const { action } = payload;
+    if (action === 'pause') {
+      botDb.prepare('UPDATE rss_feeds SET active = 0 WHERE id = ?').run(id);
+      return { ok: true, message: `Feed #${id} paused` };
+    }
+    if (action === 'resume') {
+      botDb.prepare('UPDATE rss_feeds SET active = 1 WHERE id = ?').run(id);
+      return { ok: true, message: `Feed #${id} resumed` };
+    }
+    return { error: 'Unknown action' };
+  }
+
+  // ── Channels ─────────────────────────────────────────────────────────────────
+
+  if (pathname === '/api/channels' && method === 'POST') {
+    const { name, code, token } = payload;
+    if (!name || !code || !token) return { error: 'name, code and token are required' };
+    if (code.length !== 8) return { error: 'Channel code must be 8 characters' };
+    try {
+      await channelManager.addChannel(name, code, token, session.username, bot);
+      return { ok: true, message: `Channel "${name}" added` };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  if (pathname.startsWith('/api/channels/') && method === 'DELETE') {
+    const code = pathname.split('/').pop();
+    const removed = channelManager.removeChannel(code);
+    if (!removed) return { error: 'Channel not found or is an env-configured channel' };
+    return { ok: true, message: `Channel ${code} removed` };
+  }
+
+  // ── Settings ─────────────────────────────────────────────────────────────────
+
+  if (pathname === '/api/settings' && method === 'POST') {
+    const allowed = [
+      'BOT_NAME', 'TIMEZONE', 'HELP_DELETE_SECONDS',
+      'ADMIN_DELETE_SECONDS', 'USER_DELETE_SECONDS',
+      'RSS_CHECK_INTERVAL', 'RSS_MAX_ITEMS',
+    ];
+    const updates = {};
+    for (const key of allowed) {
+      if (payload[key] !== undefined) updates[key] = String(payload[key]);
+    }
+    if (Object.keys(updates).length === 0) return { error: 'No valid settings provided' };
+
+    // Persist to bot_settings table
+    try {
+      botDb.prepare(`CREATE TABLE IF NOT EXISTS bot_settings (
+        key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`).run();
+      for (const [key, value] of Object.entries(updates)) {
+        botDb.prepare('INSERT OR REPLACE INTO bot_settings (key, value) VALUES (?, ?)').run(key, value);
+        process.env[key] = value; // apply immediately without restart
+      }
+    } catch (err) {
+      return { error: err.message };
+    }
+    return { ok: true, message: `${Object.keys(updates).length} setting(s) updated`, updates };
+  }
+
+  if (pathname === '/api/settings' && method === 'GET') {
+    // Handled by getApiData — shouldn't reach here
+    return null;
+  }
+
+  // ── Moderation ───────────────────────────────────────────────────────────────
+
+  if (pathname.startsWith('/api/modlog/unban/') && method === 'POST') {
+    const userId = pathname.split('/').pop();
+    if (!userId) return { error: 'User ID required' };
+    botDb.prepare('UPDATE bans SET active = 0 WHERE user_id = ?').run(userId);
+    return { ok: true, message: `User ${userId} unbanned` };
   }
 
   return null;
@@ -347,6 +532,26 @@ function startDashboard(bot, channelManager) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Unauthorized' }));
       }
+
+      // POST/DELETE write actions
+      if (method === 'POST' || method === 'DELETE') {
+        let body = '';
+        req.on('data', c => body += c);
+        await new Promise(resolve => req.on('end', resolve));
+        let payload = {};
+        try { payload = body ? JSON.parse(body) : {}; } catch {}
+
+        const result = await handleWriteApi(pathname, method, payload, session, bot, channelManager);
+        if (result === null) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ error: 'Not found' }));
+        }
+        const status = result.error ? 400 : 200;
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(result));
+      }
+
+      // GET read actions
       const data = await getApiData(pathname, session, bot, channelManager);
       if (data === null) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
