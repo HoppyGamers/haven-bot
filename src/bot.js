@@ -303,6 +303,12 @@ class HavenBot extends EventEmitter {
       
       req.on('end', async () => {
         try {
+          // Ignore empty bodies or non-JSON (health checks, pings)
+          if (!body || !body.trim() || !body.trim().startsWith('{')) {
+            res.writeHead(200);
+            res.end('ok');
+            return;
+          }
           const data = JSON.parse(body);
           const signature = req.headers['x-haven-signature'];
           

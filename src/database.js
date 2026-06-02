@@ -241,6 +241,7 @@ function initializeDatabase() {
     'ALTER TABLE rss_feeds ADD COLUMN channel_id TEXT',
     'ALTER TABLE users ADD COLUMN daily_streak INTEGER DEFAULT 0',
     'ALTER TABLE mod_logs ADD COLUMN duration_minutes INTEGER',
+    'ALTER TABLE rss_seen ADD COLUMN item_title TEXT',
   ];
   for (const sql of migrations) {
     try {
