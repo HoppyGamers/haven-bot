@@ -243,6 +243,75 @@ bot.on('command', async (data) => {
       await rssCommands.rssRouter(channelBot, enrichedData);
       break;
 
+    // --- Channel management (admin only) ---
+    case 'addchannel': {
+      const { admins: chanAdmins } = require('./database');
+      if (!chanAdmins.isAdmin(enrichedData.user_id.toString())) {
+        await channelBot.sendMessage('❌ **Permission Denied** — admin only.');
+        break;
+      }
+      const [chName, chCode, chToken] = enrichedData.args;
+      if (!chName || !chCode || !chToken) {
+        await channelBot.sendMessage(
+          '❌ **Usage:** `/addchannel <channel_name> <channel_code> <token>`\n\n' +
+          'Example: `/addchannel F1News 49e85d32 <64-char-token>`'
+        );
+        break;
+      }
+      if (chCode.length !== 8) {
+        await channelBot.sendMessage('❌ Channel code must be 8 characters (found in the Haven channel URL).');
+        break;
+      }
+      try {
+        await channelManager.addChannel(chName, chCode, chToken, enrichedData.user, bot);
+        await channelBot.sendMessage(
+          `✅ Channel **${chName}** (\`${chCode}\`) added successfully.\n` +
+          `The bot is now active on this channel. No restart required.`
+        );
+      } catch (err) {
+        await channelBot.sendMessage(`❌ Failed to add channel: ${err.message}`);
+      }
+      break;
+    }
+
+    case 'removechannel': {
+      const { admins: chanAdmins2 } = require('./database');
+      if (!chanAdmins2.isAdmin(enrichedData.user_id.toString())) {
+        await channelBot.sendMessage('❌ **Permission Denied** — admin only.');
+        break;
+      }
+      const [removeCode] = enrichedData.args;
+      if (!removeCode) {
+        await channelBot.sendMessage('❌ **Usage:** `/removechannel <channel_code>`');
+        break;
+      }
+      const removed = channelManager.removeChannel(removeCode);
+      if (removed) {
+        await channelBot.sendMessage(`✅ Channel \`${removeCode}\` removed. The bot will no longer respond there.`);
+      } else {
+        await channelBot.sendMessage(`❌ Channel \`${removeCode}\` not found or is an env-configured channel (cannot remove bootstrap channels).`);
+      }
+      break;
+    }
+
+    case 'channels': {
+      const { admins: chanAdmins3 } = require('./database');
+      if (!chanAdmins3.isAdmin(enrichedData.user_id.toString())) {
+        await channelBot.sendMessage('❌ **Permission Denied** — admin only.');
+        break;
+      }
+      const allChannels = channelManager.getAllTokens();
+      if (allChannels.length === 0) {
+        await channelBot.sendMessage('No channels configured.');
+        break;
+      }
+      const lines = allChannels.map(ch =>
+        `**${ch.channelName}** (\`${ch.channelCode}\`) — ${ch.source === 'env' ? '📄 env' : '🗄️ database'}`
+      );
+      await channelBot.sendMessage(`📡 **Configured Channels (${allChannels.length})**\n\n${lines.join('\n')}`);
+      break;
+    }
+
     // --- Help ---
     case 'help': {
       const agentConfig  = AGENT_ENABLED ? require('./agent/config').getGlobalConfig() : null;
