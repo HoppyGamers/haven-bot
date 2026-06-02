@@ -159,15 +159,21 @@ async function rssList(bot, data) {
     );
   }
 
+  const channelManager = require('../channels');
+
   let message = `📡 **RSS Feeds (${feeds.length})**\n\n`;
   for (const feed of feeds) {
-    const status     = feed.active ? '🟢' : '⏸️';
-    const lastCheck  = feed.last_checked
+    const status      = feed.active ? '🟢' : '⏸️';
+    const lastCheck   = feed.last_checked
       ? new Date(feed.last_checked).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
       : 'Never';
-    const filterLine = feed.filter ? ` • Filter: \`${feed.filter}\`` : '';
+    const filterLine  = feed.filter ? ` • Filter: \`${feed.filter}\`` : '';
+    const channelName = feed.channel_id
+      ? channelManager.getChannelName(feed.channel_id) || feed.channel_id
+      : 'All channels';
 
     message += `${status} **[${feed.id}] ${feed.title || feed.url}**\n`;
+    message += `📺 Channel: ${channelName}\n`;
     message += `🔗 ${feed.url}\n`;
     message += `🕐 Last checked: ${lastCheck}${filterLine}\n\n`;
   }
