@@ -240,7 +240,7 @@ bot.on('command', async (data) => {
 
     // --- RSS ---
     case 'rss':
-      await rssCommands.rssRouter(channelBot, enrichedData);
+      await rssCommands.rssRouter(channelBot, { ...enrichedData, rawBot: bot });
       break;
 
     // --- Channel management (admin only) ---

@@ -197,7 +197,9 @@ async function rssCheck(bot, data) {
   }
 
   await bot.sendMessage(`📡 Checking ${activeFeeds.length} feed${activeFeeds.length !== 1 ? 's' : ''}...`);
-  await checkFeeds(bot, rssFeeds);
+  // Use the raw bot instance (not channelBot proxy) so items post to their configured channels
+  const rawBot = data.rawBot || bot;
+  await checkFeeds(rawBot, rssFeeds);
   return bot.sendMessage(`✅ Feed check complete.`);
 }
 
