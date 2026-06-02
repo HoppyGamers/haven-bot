@@ -118,6 +118,11 @@ bot.on('command', async (data) => {
   // enrichedData and channelBot defined above before XP block
 
   try {
+  // Filter out file upload paths — Haven sends these as slash commands
+  if (command.includes('/') || command.match(/^uploads\b/i) || command.match(/\.(png|jpg|jpeg|gif|webp|mp4|mov|pdf|zip)$/i)) {
+    return;
+  }
+
   switch (command) {
     // --- Profile commands ---
     case 'ping':
