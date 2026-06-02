@@ -12,6 +12,47 @@ const channelManager     = require('./channels');
 
 // Agent — loaded only when AGENT_ENABLED=true
 const AGENT_ENABLED = (process.env.AGENT_ENABLED || 'false').toLowerCase() === 'true';
+
+// ---------------------------------------------------------------------------
+// Auto-delete helpers
+// ---------------------------------------------------------------------------
+
+const ADMIN_DELETE_SECS = parseInt(process.env.ADMIN_DELETE_SECONDS || '0', 10);
+const USER_DELETE_SECS  = parseInt(process.env.USER_DELETE_SECONDS  || '0', 10);
+
+// Admin commands that should auto-delete
+const ADMIN_COMMANDS = new Set([
+  'ban','kick','warn','mute','unmute','unban','modlog','addadmin','removeadmin',
+  'addcommand','editcommand','removecommand',
+  'addchannel','removechannel','channels',
+]);
+
+// RSS/calendar admin subcommands that should auto-delete
+const ADMIN_SUBCOMMANDS = new Set(['add','remove','pause','resume','check','edit','delete']);
+
+// User commands that should auto-delete
+const USER_COMMANDS = new Set([
+  'profile','level','stats','daily','leaderboard','top',
+  'rsvp','ping','sounds','customcommands','commands',
+]);
+
+/**
+ * Send a message and schedule auto-deletion based on command category.
+ * Returns the sent message object.
+ */
+async function sendAndDelete(bot, text, channelId, command) {
+  const msg = await bot.sendMessage(text, channelId);
+  let secs = 0;
+  if (ADMIN_COMMANDS.has(command)) secs = ADMIN_DELETE_SECS;
+  else if (USER_COMMANDS.has(command)) secs = USER_DELETE_SECS;
+
+  if (secs > 0 && msg && msg.message_id) {
+    setTimeout(async () => {
+      try { await bot.deleteMessage(msg.message_id, channelId); } catch {}
+    }, secs * 1000);
+  }
+  return msg;
+}
 let agentModule = null;
 const { startNotifier }  = require('./notifier');
 const { checkAchievements, formatUnlockAnnouncement, getGlobalRank, getTotalMessages } = require('./achievements');
@@ -51,7 +92,26 @@ bot.on('command', async (data) => {
   const channelBot = new Proxy(bot, {
     get(target, prop) {
       if (prop === 'sendMessage') {
-        return (content, options = {}) => target.sendMessage(content, enrichedData.channel_id, options);
+        return async (content, options = {}) => {
+          const msg = await target.sendMessage(content, enrichedData.channel_id, options);
+          // Auto-delete based on command category
+          let secs = 0;
+          if (ADMIN_COMMANDS.has(command)) {
+            secs = ADMIN_DELETE_SECS;
+          } else if (['rss','calendar'].includes(command)) {
+            // Only auto-delete admin subcommands (add/remove/edit/delete/check/pause/resume)
+            const sub = (enrichedData.args && enrichedData.args[0] || '').toLowerCase();
+            if (ADMIN_SUBCOMMANDS.has(sub)) secs = ADMIN_DELETE_SECS;
+          } else if (USER_COMMANDS.has(command)) {
+            secs = USER_DELETE_SECS;
+          }
+          if (secs > 0 && msg && msg.message_id) {
+            setTimeout(async () => {
+              try { await target.deleteMessage(msg.message_id, enrichedData.channel_id); } catch {}
+            }, secs * 1000);
+          }
+          return msg;
+        };
       }
       if (prop === 'deleteMessage') {
         return (messageId) => target.deleteMessage(messageId, enrichedData.channel_id);
