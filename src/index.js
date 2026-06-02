@@ -677,37 +677,63 @@ async function main() {
   ];
 
   // Register commands on every configured channel token
-  // Pace registrations to avoid hitting Haven's 30 req/min rate limit
-  const allTokens = channelManager.getAllTokens();
-  const RATE_LIMIT  = 25;          // stay under 30/min with headroom
-  const DELAY_MS    = 61000;       // wait just over 1 minute before next batch
-  const CMD_GAP_MS  = 100;         // small gap between individual commands
+  // ---------------------------------------------------------------------------
+  // Smart command registration — skip if nothing changed since last boot
+  // ---------------------------------------------------------------------------
+  const crypto     = require('crypto');
+  const allTokens  = channelManager.getAllTokens();
 
-  console.log(`📋 Registering slash commands on ${allTokens.length} channel(s)...`);
+  // Build a hash of: command list + channel codes
+  // If this matches what we registered last time, skip re-registration
+  const channelCodes = allTokens.map(c => c.channelCode).sort().join(',');
+  const cmdSummary   = commandList.map(c => `${c.command}:${c.description}`).join('|');
+  const regHash      = crypto.createHash('md5').update(cmdSummary + channelCodes).digest('hex');
 
-  let requestCount = 0;
+  const { db: botDb } = require('./database');
+  let storedHash = null;
+  try {
+    botDb.prepare(`CREATE TABLE IF NOT EXISTS bot_settings (
+      key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`).run();
+    const row = botDb.prepare('SELECT value FROM bot_settings WHERE key = ?').get('cmd_reg_hash');
+    storedHash = row?.value || null;
+  } catch {}
 
-  for (const { token, channelName } of allTokens) {
-    console.log(`   → ${channelName} (callback: ${channelManager.getCallbackUrl(token) || 'none'})`);
+  if (storedHash === regHash) {
+    console.log(`✅ Slash commands unchanged — skipping registration (${commandList.length} commands on ${allTokens.length} channel(s))`);
+  } else {
+    const RATE_LIMIT = 25;
+    const DELAY_MS   = 61000;
+    const CMD_GAP_MS = 100;
 
-    for (const { command, description } of commandList) {
-      // If approaching rate limit, pause until window resets
-      if (requestCount > 0 && requestCount % RATE_LIMIT === 0) {
-        console.log(`   ⏳ Rate limit pause — waiting ${DELAY_MS / 1000}s...`);
-        await new Promise(r => setTimeout(r, DELAY_MS));
-      }
+    console.log(`📋 Registering slash commands on ${allTokens.length} channel(s)...`);
+    let requestCount = 0;
 
-      try {
-        await bot.registerCommand(command, description, token);
-        requestCount++;
-        // Small gap between commands to smooth out the request rate
-        await new Promise(r => setTimeout(r, CMD_GAP_MS));
-      } catch (err) {
-        console.error(`   ⚠️  Failed to register /${command} on ${channelName}:`, err.message);
+    for (const { token, channelName } of allTokens) {
+      console.log(`   → ${channelName} (callback: ${channelManager.getCallbackUrl(token) || 'none'})`);
+
+      for (const { command, description } of commandList) {
+        if (requestCount > 0 && requestCount % RATE_LIMIT === 0) {
+          console.log(`   ⏳ Rate limit pause — waiting ${DELAY_MS / 1000}s...`);
+          await new Promise(r => setTimeout(r, DELAY_MS));
+        }
+        try {
+          await bot.registerCommand(command, description, token);
+          requestCount++;
+          await new Promise(r => setTimeout(r, CMD_GAP_MS));
+        } catch (err) {
+          console.error(`   ⚠️  Failed to register /${command} on ${channelName}:`, err.message);
+        }
       }
     }
+
+    // Save hash so next restart skips registration
+    try {
+      botDb.prepare('INSERT OR REPLACE INTO bot_settings (key, value) VALUES (?, ?)').run('cmd_reg_hash', regHash);
+    } catch {}
+
+    console.log(`✅ Registered ${commandList.length} commands on ${allTokens.length} channel(s)`);
   }
-  console.log(`✅ Registered ${commandList.length} commands on ${allTokens.length} channel(s)`);
 
   // Update each webhook's callback URL in Haven to use the per-token path
   // This ensures Haven POSTs to /cb/<token> so we can identify the source channel

@@ -8,677 +8,422 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:        #0d0f14;
-      --surface:   #151821;
-      --surface2:  #1a1e2a;
-      --border:    #1e2330;
-      --accent:    #5b7cf6;
-      --accent-dim:#2a3a80;
-      --text:      #e2e6f0;
-      --muted:     #6b7494;
-      --success:   #34d399;
-      --warning:   #fbbf24;
-      --error:     #f87171;
-      --sidebar-w: 220px;
+      --bg:#0d0f14;--surface:#151821;--surface2:#1a1e2a;--border:#1e2330;
+      --accent:#5b7cf6;--accent-dim:#2a3a80;--text:#e2e6f0;--muted:#6b7494;
+      --success:#34d399;--warning:#fbbf24;--error:#f87171;--sidebar-w:220px;
     }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', sans-serif;
-      min-height: 100vh;
-      display: flex;
-    }
-
-    /* ── Sidebar ── */
-    .sidebar {
-      width: var(--sidebar-w);
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 0; left: 0; bottom: 0;
-      z-index: 100;
-    }
-
-    .sidebar-logo {
-      padding: 24px 20px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .logo-icon {
-      width: 34px; height: 34px;
-      background: var(--accent);
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; flex-shrink: 0;
-    }
-
-    .logo-text {
-      font-family: 'Space Mono', monospace;
-      font-size: 14px; font-weight: 700;
-      letter-spacing: -0.3px;
-    }
-
-    .logo-sub {
-      font-size: 10px; color: var(--muted);
-      font-family: 'Space Mono', monospace;
-      letter-spacing: 1px; text-transform: uppercase;
-    }
-
-    .nav { padding: 16px 12px; flex: 1; }
-
-    .nav-section {
-      font-size: 10px; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 1px;
-      font-weight: 600; padding: 8px 8px 4px;
-      margin-top: 8px;
-    }
-
-    .nav-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 10px; border-radius: 8px;
-      cursor: pointer; font-size: 13px; font-weight: 500;
-      color: var(--muted); transition: all 0.15s;
-      user-select: none;
-    }
-
-    .nav-item:hover { background: var(--surface2); color: var(--text); }
-    .nav-item.active { background: var(--accent-dim); color: var(--accent); }
-    .nav-item .icon { font-size: 15px; width: 18px; text-align: center; }
-
-    .sidebar-footer {
-      padding: 16px 12px;
-      border-top: 1px solid var(--border);
-    }
-
-    .logout-btn {
-      display: flex; align-items: center; gap: 10px;
-      padding: 9px 10px; border-radius: 8px;
-      cursor: pointer; font-size: 13px;
-      color: var(--muted); transition: all 0.15s;
-    }
-
-    .logout-btn:hover { color: var(--error); background: rgba(248,113,113,0.08); }
-
-    /* ── Main content ── */
-    .main {
-      margin-left: var(--sidebar-w);
-      flex: 1;
-      padding: 32px;
-      min-height: 100vh;
-    }
-
-    .page { display: none; }
-    .page.active { display: block; }
-
-    .page-header {
-      margin-bottom: 28px;
-    }
-
-    .page-header h1 {
-      font-size: 22px; font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-
-    .page-header p {
-      color: var(--muted); font-size: 14px; margin-top: 4px;
-    }
-
-    /* ── Cards ── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px 24px;
-    }
-
-    .card-title {
-      font-size: 12px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.8px;
-      color: var(--muted); margin-bottom: 16px;
-    }
-
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
-    }
-
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px;
-    }
-
-    .stat-label {
-      font-size: 11px; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.8px;
-      margin-bottom: 8px;
-    }
-
-    .stat-value {
-      font-size: 28px; font-weight: 700;
-      font-family: 'Space Mono', monospace;
-      letter-spacing: -1px;
-    }
-
-    .stat-sub {
-      font-size: 12px; color: var(--muted); margin-top: 4px;
-    }
-
-    /* ── Table ── */
-    .table-wrap { overflow-x: auto; }
-
-    table {
-      width: 100%; border-collapse: collapse;
-      font-size: 13px;
-    }
-
-    th {
-      text-align: left; padding: 8px 12px;
-      font-size: 11px; font-weight: 600;
-      color: var(--muted); text-transform: uppercase;
-      letter-spacing: 0.8px; border-bottom: 1px solid var(--border);
-    }
-
-    td {
-      padding: 12px 12px; border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
-
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: var(--surface2); }
-
-    /* ── Badges ── */
-    .badge {
-      display: inline-flex; align-items: center;
-      padding: 3px 8px; border-radius: 999px;
-      font-size: 11px; font-weight: 600;
-      font-family: 'Space Mono', monospace;
-    }
-
-    .badge-green  { background: rgba(52,211,153,0.12); color: var(--success); }
-    .badge-yellow { background: rgba(251,191,36,0.12);  color: var(--warning); }
-    .badge-red    { background: rgba(248,113,113,0.12); color: var(--error); }
-    .badge-blue   { background: rgba(91,124,246,0.12);  color: var(--accent); }
-    .badge-gray   { background: var(--border); color: var(--muted); }
-
-    /* ── Loading ── */
-    .loading {
-      text-align: center; padding: 60px 20px;
-      color: var(--muted); font-size: 14px;
-    }
-
-    .spinner {
-      width: 24px; height: 24px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      margin: 0 auto 16px;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Channels list ── */
-    .channel-list { display: flex; flex-direction: column; gap: 8px; }
-
-    .channel-item {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 16px; background: var(--surface2);
-      border-radius: 8px; border: 1px solid var(--border);
-    }
-
-    .channel-name { font-weight: 500; font-size: 14px; }
-    .channel-code {
-      font-family: 'Space Mono', monospace;
-      font-size: 11px; color: var(--muted);
-      margin-top: 2px;
-    }
-
-    /* ── Uptime ── */
-    .uptime-display {
-      font-family: 'Space Mono', monospace;
-      font-size: 13px; color: var(--success);
-    }
-
-    /* ── Empty state ── */
-    .empty {
-      text-align: center; padding: 40px 20px;
-      color: var(--muted); font-size: 14px;
-    }
-
-    /* ── Grid layouts ── */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    @media (max-width: 900px) {
-      .grid-2 { grid-template-columns: 1fr; }
-    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;display:flex}
+    .sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto}
+    .sidebar-logo{padding:20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+    .logo-icon{width:34px;height:34px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+    .logo-text{font-family:'Space Mono',monospace;font-size:14px;font-weight:700}
+    .logo-sub{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase}
+    .nav{padding:12px;flex:1}
+    .nav-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:600;padding:8px 8px 4px;margin-top:8px}
+    .nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);transition:all 0.15s;user-select:none}
+    .nav-item:hover{background:var(--surface2);color:var(--text)}
+    .nav-item.active{background:var(--accent-dim);color:var(--accent)}
+    .nav-item .icon{font-size:14px;width:18px;text-align:center}
+    .sidebar-footer{padding:12px;border-top:1px solid var(--border);flex-shrink:0}
+    .logout-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted);transition:all 0.15s}
+    .logout-btn:hover{color:var(--error);background:rgba(248,113,113,0.08)}
+    .main{margin-left:var(--sidebar-w);flex:1;padding:28px;min-height:100vh}
+    .page{display:none}.page.active{display:block}
+    .page-header{margin-bottom:24px}
+    .page-header h1{font-size:22px;font-weight:700;letter-spacing:-0.5px}
+    .page-header p{color:var(--muted);font-size:14px;margin-top:4px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:16px}
+    .card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:16px}
+    .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:20px}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+    .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
+    .stat-value{font-size:26px;font-weight:700;font-family:'Space Mono',monospace;letter-spacing:-1px}
+    .stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+    .table-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;border-bottom:1px solid var(--border)}
+    td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    tr:hover td{background:var(--surface2)}
+    .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;font-family:'Space Mono',monospace}
+    .badge-green{background:rgba(52,211,153,0.12);color:var(--success)}
+    .badge-yellow{background:rgba(251,191,36,0.12);color:var(--warning)}
+    .badge-red{background:rgba(248,113,113,0.12);color:var(--error)}
+    .badge-blue{background:rgba(91,124,246,0.12);color:var(--accent)}
+    .badge-gray{background:var(--border);color:var(--muted)}
+    .loading{text-align:center;padding:50px 20px;color:var(--muted);font-size:14px}
+    .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;margin:0 auto 14px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
+    .channel-list{display:flex;flex-direction:column;gap:8px}
+    .channel-item{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)}
+    .channel-name{font-weight:500;font-size:14px}
+    .channel-code{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+    @media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+    .health-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border)}
+    .health-row:last-child{border-bottom:none}
+    .health-name{font-weight:500;font-size:14px}
+    .health-detail{font-size:12px;color:var(--muted);margin-top:2px;font-family:'Space Mono',monospace}
+    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+    .dot-green{background:var(--success)}
+    .dot-yellow{background:var(--warning)}
+    .dot-red{background:var(--error)}
+    .tool-bar{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+    .tool-bar-fill{height:6px;border-radius:3px;background:var(--accent);min-width:4px}
+    .tool-bar-track{flex:1;height:6px;border-radius:3px;background:var(--border)}
+    .mono{font-family:'Space Mono',monospace;font-size:12px}
+    .truncate{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    code{font-family:'Space Mono',monospace;background:var(--border);padding:2px 5px;border-radius:3px;font-size:11px;color:var(--accent)}
   </style>
 </head>
 <body>
-
-<!-- Sidebar -->
 <nav class="sidebar">
   <div class="sidebar-logo">
     <div class="logo-icon">🤖</div>
-    <div>
-      <div class="logo-text">Haven Bot</div>
-      <div class="logo-sub">Dashboard</div>
-    </div>
+    <div><div class="logo-text">Haven Bot</div><div class="logo-sub">Dashboard</div></div>
   </div>
-
   <div class="nav">
     <div class="nav-section">Main</div>
-    <div class="nav-item active" onclick="navigate('overview')">
-      <span class="icon">📊</span> Overview
-    </div>
+    <div class="nav-item active" onclick="navigate('overview')"><span class="icon">📊</span> Overview</div>
 
     <div class="nav-section">Bot</div>
-    <div class="nav-item" onclick="navigate('channels')">
-      <span class="icon">📡</span> Channels
-    </div>
-    <div class="nav-item" onclick="navigate('calendar')">
-      <span class="icon">📅</span> Calendar
-    </div>
-    <div class="nav-item" onclick="navigate('rss')">
-      <span class="icon">📰</span> RSS Feeds
-    </div>
-    <div class="nav-item" onclick="navigate('modlog')">
-      <span class="icon">🛡️</span> Moderation
-    </div>
+    <div class="nav-item" onclick="navigate('channels')"><span class="icon">📡</span> Channels</div>
+    <div class="nav-item" onclick="navigate('users')"><span class="icon">👥</span> Users</div>
+    <div class="nav-item" onclick="navigate('calendar')"><span class="icon">📅</span> Calendar</div>
+    <div class="nav-item" onclick="navigate('rss')"><span class="icon">📰</span> RSS Feeds</div>
+    <div class="nav-item" onclick="navigate('modlog')"><span class="icon">🛡️</span> Moderation</div>
 
     <div class="nav-section">AI Agent</div>
-    <div class="nav-item" id="agent-nav" onclick="navigate('agent')" style="display:none">
-      <span class="icon">🧠</span> Agent Config
-    </div>
+    <div class="nav-item agent-only" onclick="navigate('agent')" style="display:none"><span class="icon">🧠</span> Agent Stats</div>
   </div>
-
   <div class="sidebar-footer">
-    <div class="logout-btn" onclick="logout()">
-      <span class="icon">⎋</span> Sign out
-    </div>
+    <div class="logout-btn" onclick="logout()"><span class="icon">⎋</span> Sign out</div>
   </div>
 </nav>
 
-<!-- Main content -->
 <main class="main">
-
-  <!-- Overview -->
-  <div id="page-overview" class="page active">
-    <div class="page-header">
-      <h1>Overview</h1>
-      <p>Bot status and quick stats</p>
-    </div>
-    <div id="overview-content"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-  </div>
-
-  <!-- Channels -->
-  <div id="page-channels" class="page">
-    <div class="page-header">
-      <h1>Channels</h1>
-      <p>Configured Haven channels</p>
-    </div>
-    <div id="channels-content"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-  </div>
-
-  <!-- Calendar -->
-  <div id="page-calendar" class="page">
-    <div class="page-header">
-      <h1>Calendar</h1>
-      <p>Upcoming events</p>
-    </div>
-    <div id="calendar-content"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-  </div>
-
-  <!-- RSS -->
-  <div id="page-rss" class="page">
-    <div class="page-header">
-      <h1>RSS Feeds</h1>
-      <p>Monitored news feeds</p>
-    </div>
-    <div id="rss-content"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-  </div>
-
-  <!-- Modlog -->
-  <div id="page-modlog" class="page">
-    <div class="page-header">
-      <h1>Moderation Log</h1>
-      <p>Recent moderation actions</p>
-    </div>
-    <div id="modlog-content"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-  </div>
-
-  <!-- Agent -->
-  <div id="page-agent" class="page">
-    <div class="page-header">
-      <h1>AI Agent</h1>
-      <p>Agent configuration and status</p>
-    </div>
-    <div id="agent-content"><div class="loading"><div class="spinner"></div>Loading...</div></div>
-  </div>
-
+  <div id="page-overview" class="page active"><div class="page-header"><h1>Overview</h1><p>Bot status and quick stats</p></div><div id="overview-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-channels" class="page"><div class="page-header"><h1>Channels</h1><p>Configured Haven channels</p></div><div id="channels-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-users" class="page"><div class="page-header"><h1>Users</h1><p>XP leaderboard and statistics</p></div><div id="users-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-calendar" class="page"><div class="page-header"><h1>Calendar</h1><p>Upcoming events and notifications</p></div><div id="calendar-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-rss" class="page"><div class="page-header"><h1>RSS Feeds</h1><p>Monitored news feeds</p></div><div id="rss-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-modlog" class="page"><div class="page-header"><h1>Moderation Log</h1><p>Recent moderation actions</p></div><div id="modlog-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-agent" class="page"><div class="page-header"><h1>AI Agent Stats</h1><p>Conversations, memory, and tool usage</p></div><div id="agent-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
 </main>
 
 <script>
-// ── Navigation ──────────────────────────────────────────────────────────────
-
-const pages = ['overview','channels','calendar','rss','modlog','agent'];
+const pages = ['overview','channels','users','calendar','rss','modlog','agent'];
 let currentPage = 'overview';
 const loaded = new Set();
+let uptimeBase = 0;
 
 function navigate(page) {
-  pages.forEach(p => {
-    document.getElementById(`page-${p}`).classList.remove('active');
-  });
+  pages.forEach(p => document.getElementById(`page-${p}`).classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-
   document.getElementById(`page-${page}`).classList.add('active');
   document.querySelector(`[onclick="navigate('${page}')"]`)?.classList.add('active');
   currentPage = page;
-
-  if (!loaded.has(page)) {
-    loadPage(page);
-    loaded.add(page);
-  }
+  if (!loaded.has(page)) { loadPage(page); loaded.add(page); }
 }
-
-// ── API ──────────────────────────────────────────────────────────────────────
 
 async function api(endpoint) {
   const res = await fetch(endpoint);
-  if (res.status === 401) {
-    window.location.href = '/login';
-    return null;
-  }
+  if (res.status === 401) { window.location.href = '/login'; return null; }
   return res.json();
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatUptime(secs) {
-  const d = Math.floor(secs / 86400);
-  const h = Math.floor((secs % 86400) / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  return `${m}m ${s}s`;
-}
-
-function formatDate(utc) {
+function fmt(utc) {
   if (!utc) return '—';
-  return new Date(utc).toLocaleString('en-US', {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
+  return new Date(utc).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 }
 
-function badge(text, color) {
-  return `<span class="badge badge-${color}">${text}</span>`;
+function fmtUptime(s) {
+  const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60),sec=s%60;
+  if(d>0) return `${d}d ${h}h ${m}m`;
+  if(h>0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${sec}s`;
 }
 
-// ── Page loaders ─────────────────────────────────────────────────────────────
+function badge(text,color){return `<span class="badge badge-${color}">${text}</span>`;}
+
+function num(n){return (n||0).toLocaleString();}
 
 async function loadPage(page) {
-  const data = await api(`/api/${page === 'overview' ? 'status' : page === 'modlog' ? 'modlog' : page}`);
+  const endpointMap = {
+    overview:'status', channels:'channels',
+    users:'users', calendar:'calendar', rss:'rss',
+    modlog:'modlog', agent:'agent'
+  };
+  const data = await api(`/api/${endpointMap[page]}`);
   if (!data) return;
-
   const el = document.getElementById(`${page}-content`);
-
-  if (page === 'overview')  renderOverview(el, data);
-  if (page === 'channels')  renderChannels(el, data);
-  if (page === 'calendar')  renderCalendar(el, data);
-  if (page === 'rss')       renderRSS(el, data);
-  if (page === 'modlog')    renderModlog(el, data);
-  if (page === 'agent')     renderAgent(el, data);
+  const renderers = {
+    overview:renderOverview, channels:renderChannels,
+    users:renderUsers, calendar:renderCalendar, rss:renderRSS,
+    modlog:renderModlog, agent:renderAgent
+  };
+  renderers[page]?.(el, data);
 }
 
-// ── Overview ──────────────────────────────────────────────────────────────────
+// ── Overview ─────────────────────────────────────────────────────────────────
+async function renderOverview(el, d) {
+  if (d.agentEnabled) document.querySelectorAll('.agent-only').forEach(e=>e.style.display='flex');
+  uptimeBase = d.uptime;
 
-function renderOverview(el, d) {
-  if (d.agentEnabled) {
-    document.getElementById('agent-nav').style.display = 'flex';
+  // Fetch health data in parallel
+  const health = await api('/api/health').catch(() => null);
+
+  function healthRow(name, detail, ok, ms, disabled) {
+    const dot = disabled ? 'dot-yellow' : ok ? 'dot-green' : 'dot-red';
+    const status = disabled ? 'disabled' : ok ? `${ms}ms` : 'unreachable';
+    const statusColor = disabled ? 'var(--muted)' : ok ? 'var(--success)' : 'var(--error)';
+    return `<div class="health-row">
+      <div><div class="health-name"><span class="dot ${dot}"></span>${name}</div><div class="health-detail" style="font-size:11px;color:var(--muted);margin-top:2px;font-family:'Space Mono',monospace">${detail}</div></div>
+      <div style="color:${statusColor};font-family:'Space Mono',monospace;font-size:13px">${status}</div>
+    </div>`;
   }
+
+  const healthHtml = health ? `
+    ${healthRow('Haven Bot', 'Callback server · uptime ' + fmtUptime(health.bot.uptime), true, null, false).replace('null', 'ok')}
+    ${healthRow('Ollama', health.ollama.url || 'configured in .env', health.ollama.ok, health.ollama.ms, false)}
+    ${healthRow('SearXNG', 'Web search engine', health.searxng.ok, health.searxng.ms, health.searxng.disabled)}
+  ` : `<div style="color:var(--muted);font-size:13px">Could not load health data</div>`;
 
   el.innerHTML = `
     <div class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-label">Status</div>
-        <div class="stat-value" style="font-size:20px;color:var(--success)">● Online</div>
-        <div class="stat-sub">${d.botName}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Uptime</div>
-        <div class="stat-value uptime-display" id="uptime-display">${formatUptime(d.uptime)}</div>
-        <div class="stat-sub">since last restart</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Channels</div>
-        <div class="stat-value">${d.channels}</div>
-        <div class="stat-sub">active channels</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Timezone</div>
-        <div class="stat-value" style="font-size:16px;padding-top:6px">${d.timezone}</div>
-        <div class="stat-sub">server timezone</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">AI Agent</div>
-        <div class="stat-value" style="font-size:16px;padding-top:4px;color:${d.agentEnabled ? 'var(--success)' : 'var(--muted)'}">${d.agentEnabled ? '● Enabled' : '● Disabled'}</div>
-        <div class="stat-sub">${d.agentEnabled ? d.agentName : 'set AGENT_ENABLED=true'}</div>
-      </div>
+      <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value" style="font-size:18px;color:var(--success)">● Online</div><div class="stat-sub">${d.botName}</div></div>
+      <div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value" id="uptime-val" style="font-size:16px;padding-top:4px">${fmtUptime(d.uptime)}</div><div class="stat-sub">since last restart</div></div>
+      <div class="stat-card"><div class="stat-label">Channels</div><div class="stat-value">${d.channels}</div><div class="stat-sub">active</div></div>
+      <div class="stat-card"><div class="stat-label">Timezone</div><div class="stat-value" style="font-size:14px;padding-top:6px">${d.timezone}</div><div class="stat-sub">server timezone</div></div>
+      <div class="stat-card"><div class="stat-label">AI Agent</div><div class="stat-value" style="font-size:16px;padding-top:4px;color:${d.agentEnabled?'var(--success)':'var(--muted)'}">${d.agentEnabled?'● Enabled':'● Disabled'}</div><div class="stat-sub">${d.agentEnabled?d.agentName:'set AGENT_ENABLED=true'}</div></div>
     </div>
 
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Service Health</div>
+        ${healthHtml}
+      </div>
+      <div class="card">
+        <div class="card-title">Channels</div>
+        <div class="channel-list">
+          ${d.channelList.map(c=>`<div class="channel-item"><div><div class="channel-name">${c.name}</div><div class="channel-code">${c.code}</div></div>${badge(c.source==='env'?'env':'database',c.source==='env'?'blue':'gray')}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  setInterval(()=>{uptimeBase++;const e=document.getElementById('uptime-val');if(e)e.textContent=fmtUptime(uptimeBase);},1000);
+}
+
+// ── Health ────────────────────────────────────────────────────────────────────
+function renderHealth(el, d) {
+  function row(name, detail, ok, ms, disabled) {
+    const dot = disabled ? 'dot-yellow' : ok ? 'dot-green' : 'dot-red';
+    const status = disabled ? 'disabled' : ok ? `${ms}ms` : 'unreachable';
+    const statusColor = disabled ? 'var(--muted)' : ok ? 'var(--success)' : 'var(--error)';
+    return `<div class="health-row">
+      <div><div class="health-name"><span class="dot ${dot}"></span>${name}</div><div class="health-detail">${detail}</div></div>
+      <div style="color:${statusColor};font-family:'Space Mono',monospace;font-size:13px">${status}</div>
+    </div>`;
+  }
+  el.innerHTML = `
     <div class="card">
-      <div class="card-title">Channels</div>
-      <div class="channel-list">
-        ${d.channelList.map(c => `
-          <div class="channel-item">
-            <div>
-              <div class="channel-name">${c.name}</div>
-              <div class="channel-code">${c.code}</div>
-            </div>
-            ${badge(c.source === 'env' ? 'env' : 'database', c.source === 'env' ? 'blue' : 'gray')}
-          </div>
-        `).join('')}
-      </div>
+      <div class="card-title">Service Status</div>
+      ${row('Haven Bot', 'Callback server', true, null, false).replace('null', d.bot.uptime ? fmtUptime(d.bot.uptime) : 'ok')}
+      ${row('Ollama', d.ollama.url || 'configured in .env', d.ollama.ok, d.ollama.ms, false)}
+      ${row('SearXNG', 'Web search engine', d.searxng.ok, d.searxng.ms, d.searxng.disabled)}
     </div>
-  `;
-
-  // Live uptime counter
-  let uptime = d.uptime;
-  setInterval(() => {
-    uptime++;
-    const el = document.getElementById('uptime-display');
-    if (el) el.textContent = formatUptime(uptime);
-  }, 1000);
+    <div class="card">
+      <div class="card-title">Tips</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7">
+        • If Ollama is unreachable, check <code>OLLAMA_URL</code> in your .env<br>
+        • If SearXNG shows disabled, set <code>SEARXNG_URL</code> to enable web search<br>
+        • Refresh this page to re-check connectivity
+      </p>
+    </div>`;
 }
 
 // ── Channels ──────────────────────────────────────────────────────────────────
-
-async function renderChannels(el, d) {
-  const data = await api('/api/channels');
-  if (!data) return;
+function renderChannels(el, d) {
   el.innerHTML = `
     <div class="card">
-      <div class="card-title">Configured Channels (${data.channels.length})</div>
+      <div class="card-title">Configured Channels (${d.channels.length})</div>
       <div class="channel-list">
-        ${data.channels.map(c => `
-          <div class="channel-item">
-            <div>
-              <div class="channel-name">${c.name}</div>
-              <div class="channel-code">${c.code}</div>
-            </div>
-            ${badge(c.source === 'env' ? '📄 env' : '🗄️ database', c.source === 'env' ? 'blue' : 'gray')}
-          </div>
-        `).join('')}
+        ${d.channels.map(c=>`<div class="channel-item"><div><div class="channel-name">${c.name}</div><div class="channel-code">${c.code}</div></div>${badge(c.source==='env'?'📄 env':'🗄️ database',c.source==='env'?'blue':'gray')}</div>`).join('')}
       </div>
-      <p style="margin-top:16px;font-size:12px;color:var(--muted)">
-        Add channels with <code style="font-family:monospace;background:var(--border);padding:2px 5px;border-radius:3px">/addchannel</code> in Haven. No restart required.
-      </p>
+      <p style="margin-top:16px;font-size:12px;color:var(--muted)">Add channels with <code>/addchannel</code> in Haven. No restart required.</p>
+    </div>`;
+}
+
+// ── Users ──────────────────────────────────────────────────────────────────────
+function renderUsers(el, d) {
+  el.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value">${num(d.totalUsers)}</div><div class="stat-sub">registered</div></div>
+      <div class="stat-card"><div class="stat-label">Total XP</div><div class="stat-value">${num(d.totalXp)}</div><div class="stat-sub">awarded</div></div>
+      <div class="stat-card"><div class="stat-label">Achievements</div><div class="stat-value">${num(d.totalAchievements)}</div><div class="stat-sub">unlocked</div></div>
     </div>
-  `;
+    <div class="card">
+      <div class="card-title">Leaderboard — Top ${d.leaderboard.length}</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Rank</th><th>User</th><th>Level</th><th>XP</th></tr></thead>
+          <tbody>
+            ${d.leaderboard.map((u,i)=>`<tr>
+              <td style="font-family:'Space Mono',monospace;color:var(--muted)">${i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</td>
+              <td style="font-weight:500">${u.username}</td>
+              <td>${badge(`Lv ${u.level}`,'blue')}</td>
+              <td style="font-family:'Space Mono',monospace">${num(u.xp)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 }
 
 // ── Calendar ──────────────────────────────────────────────────────────────────
-
 function renderCalendar(el, d) {
-  if (!d.events || d.events.length === 0) {
-    el.innerHTML = `<div class="card"><div class="empty">No upcoming events</div></div>`;
-    return;
-  }
+  if (!d.events?.length) { el.innerHTML=`<div class="card"><div class="empty">No upcoming events</div></div>`; return; }
   el.innerHTML = `
     <div class="card">
       <div class="card-title">Upcoming Events (${d.events.length})</div>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Title</th>
-              <th>Date & Time</th>
-              <th>Channel</th>
-              <th>Created By</th>
-            </tr>
-          </thead>
+          <thead><tr><th>ID</th><th>Title</th><th>Date & Time</th><th>RSVPs</th><th>Notifications</th><th>Created By</th></tr></thead>
           <tbody>
-            ${d.events.map(e => `
-              <tr>
-                <td style="font-family:monospace;color:var(--muted)">#${e.id}</td>
+            ${d.events.map(e=>{
+              const pendingNotifs = (e.notifications||[]).filter(n=>!n.sent).length;
+              const sentNotifs    = (e.notifications||[]).filter(n=>n.sent).length;
+              return `<tr>
+                <td class="mono" style="color:var(--muted)">#${e.id}</td>
                 <td style="font-weight:500">${e.title}</td>
-                <td>${formatDate(e.event_time)}</td>
-                <td style="font-family:monospace;font-size:12px">${e.channel_id}</td>
-                <td style="color:var(--muted)">${e.created_by || '—'}</td>
-              </tr>
-            `).join('')}
+                <td>${fmt(e.event_time)}</td>
+                <td>${e.rsvpCount||0}</td>
+                <td>${sentNotifs>0?badge(`${sentNotifs} sent`,'green'):''}${pendingNotifs>0?` ${badge(`${pendingNotifs} pending`,'yellow')}`:''}</td>
+                <td style="color:var(--muted)">${e.created_by||'—'}</td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 // ── RSS ───────────────────────────────────────────────────────────────────────
-
 function renderRSS(el, d) {
-  if (!d.feeds || d.feeds.length === 0) {
-    el.innerHTML = `<div class="card"><div class="empty">No RSS feeds configured</div></div>`;
-    return;
-  }
+  if (!d.feeds?.length) { el.innerHTML=`<div class="card"><div class="empty">No RSS feeds configured</div></div>`; return; }
   el.innerHTML = `
     <div class="card">
       <div class="card-title">RSS Feeds (${d.feeds.length})</div>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Feed</th>
-              <th>Channel</th>
-              <th>Status</th>
-              <th>Last Checked</th>
-            </tr>
-          </thead>
+          <thead><tr><th>ID</th><th>Feed</th><th>Channel</th><th>Items Seen</th><th>Status</th><th>Last Checked</th></tr></thead>
           <tbody>
-            ${d.feeds.map(f => `
-              <tr>
-                <td style="font-family:monospace;color:var(--muted)">#${f.id}</td>
-                <td>
-                  <div style="font-weight:500">${f.title || 'Untitled'}</div>
-                  <div style="font-size:11px;color:var(--muted);margin-top:2px">${f.url}</div>
-                </td>
-                <td style="font-weight:500">${f.channelName}</td>
-                <td>${badge(f.active ? 'active' : 'paused', f.active ? 'green' : 'yellow')}</td>
-                <td style="color:var(--muted)">${formatDate(f.last_checked)}</td>
-              </tr>
-            `).join('')}
+            ${d.feeds.map(f=>`<tr>
+              <td class="mono" style="color:var(--muted)">#${f.id}</td>
+              <td>
+                <div style="font-weight:500">${f.title||'Untitled'}</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">${f.url}</div>
+                ${f.lastItemTitle?`<div style="font-size:11px;color:var(--muted);margin-top:1px;font-style:italic">Last: ${f.lastItemTitle.slice(0,60)}...</div>`:''}
+              </td>
+              <td style="font-weight:500">${f.channelName}</td>
+              <td class="mono">${num(f.seenCount)}</td>
+              <td>${badge(f.active?'active':'paused',f.active?'green':'yellow')}</td>
+              <td style="color:var(--muted)">${fmt(f.last_checked)}</td>
+            </tr>`).join('')}
           </tbody>
         </table>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 // ── Modlog ────────────────────────────────────────────────────────────────────
-
 function renderModlog(el, d) {
-  if (!d.logs || d.logs.length === 0) {
-    el.innerHTML = `<div class="card"><div class="empty">No moderation actions recorded</div></div>`;
-    return;
-  }
-  const actionColors = {
-    ban: 'red', kick: 'red', warn: 'yellow',
-    mute: 'yellow', unmute: 'green', unban: 'green'
-  };
+  if (!d.logs?.length) { el.innerHTML=`<div class="card"><div class="empty">No moderation actions recorded</div></div>`; return; }
+  const colors={ban:'red',kick:'red',warn:'yellow',mute:'yellow',unmute:'green',unban:'green'};
   el.innerHTML = `
     <div class="card">
       <div class="card-title">Recent Actions (${d.logs.length})</div>
       <div class="table-wrap">
         <table>
-          <thead>
-            <tr>
-              <th>Action</th>
-              <th>Target</th>
-              <th>Moderator</th>
-              <th>Reason</th>
-              <th>Date</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Action</th><th>Target</th><th>Moderator</th><th>Reason</th><th>Date</th></tr></thead>
           <tbody>
-            ${d.logs.map(l => `
-              <tr>
-                <td>${badge(l.action, actionColors[l.action] || 'gray')}</td>
-                <td style="font-weight:500">${l.target_user_id}</td>
-                <td style="color:var(--muted)">${l.mod_user_id}</td>
-                <td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.reason || '—'}</td>
-                <td style="color:var(--muted)">${formatDate(l.timestamp)}</td>
-              </tr>
-            `).join('')}
+            ${d.logs.map(l=>`<tr>
+              <td>${badge(l.action,colors[l.action]||'gray')}</td>
+              <td style="font-weight:500">${l.target_user_id}</td>
+              <td style="color:var(--muted)">${l.mod_user_id}</td>
+              <td class="truncate" style="color:var(--muted)">${l.reason||'—'}</td>
+              <td style="color:var(--muted)">${fmt(l.timestamp)}</td>
+            </tr>`).join('')}
           </tbody>
         </table>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 // ── Agent ─────────────────────────────────────────────────────────────────────
-
 function renderAgent(el, d) {
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-title">Agent Status</div>
-      <p style="color:var(--muted);font-size:14px">
-        Agent configuration is managed via slash commands in Haven.<br><br>
-        Use <code style="font-family:monospace;background:var(--border);padding:2px 5px;border-radius:3px">/bob config show</code> in any channel to view the current config,
-        or <code style="font-family:monospace;background:var(--border);padding:2px 5px;border-radius:3px">/bob help</code> for all agent commands.
-      </p>
-    </div>
-  `;
-}
+  if (!d.enabled) { el.innerHTML=`<div class="card"><div class="empty">AI Agent is not enabled. Set AGENT_ENABLED=true in .env</div></div>`; return; }
 
-// ── Logout ────────────────────────────────────────────────────────────────────
+  const maxToolCount = Math.max(...(d.toolStats||[]).map(t=>t.count), 1);
+
+  el.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-label">Conversations</div><div class="stat-value">${num(d.totalConversations)}</div><div class="stat-sub">total messages</div></div>
+      <div class="stat-card"><div class="stat-label">Memories</div><div class="stat-value">${num(d.totalMemories)}</div><div class="stat-sub">stored facts</div></div>
+      <div class="stat-card"><div class="stat-label">Tool Calls</div><div class="stat-value">${num(d.totalToolCalls)}</div><div class="stat-sub">total executed</div></div>
+      <div class="stat-card"><div class="stat-label">Model</div><div class="stat-value" style="font-size:13px;padding-top:6px">${d.model}</div><div class="stat-sub">${d.agentName}</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Tool Usage</div>
+        ${(d.toolStats||[]).length===0?'<div class="empty" style="padding:20px">No tool calls yet</div>':
+          (d.toolStats||[]).map(t=>`
+            <div style="margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="font-size:13px">${t.tool_name}</span>
+                <span class="mono" style="color:var(--muted)">${t.count}</span>
+              </div>
+              <div class="tool-bar-track"><div class="tool-bar-fill" style="width:${Math.round(t.count/maxToolCount*100)}%"></div></div>
+            </div>`).join('')}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Conversations by Channel</div>
+        ${(d.channelConversations||[]).length===0?'<div class="empty" style="padding:20px">No conversations yet</div>':
+          (d.channelConversations||[]).map(c=>`
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:13px;font-weight:500">${c.channelName}</span>
+              <span class="mono" style="color:var(--muted)">${num(c.count)}</span>
+            </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Recent Tool Calls (last 20)</div>
+      ${(d.recentTools||[]).length===0?'<div class="empty">No tool calls yet</div>':`
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tool</th><th>Arguments</th><th>Result</th><th>Time</th></tr></thead>
+            <tbody>
+              ${(d.recentTools||[]).map(t=>`<tr>
+                <td>${badge(t.tool_name,'blue')}</td>
+                <td class="truncate mono" style="color:var(--muted)">${t.arguments||'—'}</td>
+                <td class="truncate" style="color:var(--muted)">${(t.result||'').slice(0,60)||'—'}</td>
+                <td style="color:var(--muted)">${fmt(t.timestamp)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`}
+    </div>`;
+}
 
 async function logout() {
-  await fetch('/auth/logout', { method: 'POST' });
-  window.location.href = '/login';
+  await fetch('/auth/logout',{method:'POST'});
+  window.location.href='/login';
 }
-
-// ── Init ──────────────────────────────────────────────────────────────────────
 
 loadPage('overview');
 </script>

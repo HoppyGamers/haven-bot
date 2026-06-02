@@ -194,7 +194,24 @@ async function executeTool(toolName, args, context) {
   }
 }
 
+/**
+ * Execute a tool and log it to the agent database.
+ */
+async function executeToolWithLogging(toolName, args, context) {
+  const result = await executeTool(toolName, args, context);
+  try {
+    const { getDb } = require('./database');
+    const agentDb = getDb();
+    if (agentDb) {
+      agentDb.prepare(
+        'INSERT INTO tool_log (channel_id, tool_name, arguments, result) VALUES (?, ?, ?, ?)'
+      ).run(context.channelId, toolName, JSON.stringify(args), String(result||'').slice(0, 500));
+    }
+  } catch {}
+  return result;
+}
+
 module.exports = {
   TOOL_DEFINITIONS,
-  executeTool,
+  executeTool: executeToolWithLogging,
 };

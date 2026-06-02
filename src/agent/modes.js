@@ -22,6 +22,9 @@ function shouldRespond(message, config) {
   // Never respond to empty messages or webhook messages
   if (!content || !content.trim()) return false;
 
+  // Never respond to slash commands — those are handled by the command handler
+  if (content.trim().startsWith('/')) return false;
+
   // Never respond to our own messages (prevent loops)
   // Bot messages come through as webhook events which we already filter in bot.js
 

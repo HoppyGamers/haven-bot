@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 const http     = require('http');
+const https    = require('https');
 const fs       = require('fs');
 const path     = require('path');
 const crypto   = require('crypto');
@@ -103,8 +104,8 @@ function validateSession(cookieHeader) {
 // API handlers
 // ---------------------------------------------------------------------------
 
-function getApiData(pathname, session, bot, channelManager) {
-  const { calendar, users, rssFeeds, admins, modLogs, bans } = require('../database');
+async function getApiData(pathname, session, bot, channelManager) {
+  const { calendar, users, rssFeeds, admins, modLogs, bans, db } = require('../database');
 
   if (pathname === '/api/status') {
     const allChannels = channelManager.getAllTokens();
@@ -121,17 +122,11 @@ function getApiData(pathname, session, bot, channelManager) {
     };
   }
 
-  if (pathname === '/api/calendar') {
-    const events = calendar.getUpcoming(50);
-    return { events };
-  }
-
-  if (pathname === '/api/rss') {
-    const feeds = rssFeeds.getAll();
+  if (pathname === '/api/channels') {
+    const all = channelManager.getAllTokens();
     return {
-      feeds: feeds.map(f => ({
-        ...f,
-        channelName: channelManager.getChannelName(f.channel_id) || f.channel_id,
+      channels: all.map(c => ({
+        name: c.channelName, code: c.channelCode, source: c.source
       }))
     };
   }
@@ -141,17 +136,122 @@ function getApiData(pathname, session, bot, channelManager) {
     return { logs };
   }
 
-  if (pathname === '/api/leaderboard') {
-    const top = users.getLeaderboard ? users.getLeaderboard(20) : [];
-    return { users: top };
+  if (pathname === '/api/users') {
+    const top     = users.getLeaderboard(50);
+    const total   = db.prepare('SELECT COUNT(*) as c FROM users').get();
+    const totalXp = db.prepare('SELECT SUM(xp) as x FROM users').get();
+    const achiev  = db.prepare('SELECT COUNT(*) as c FROM user_achievements').get();
+    return {
+      leaderboard: top,
+      totalUsers:  total?.c || 0,
+      totalXp:     totalXp?.x || 0,
+      totalAchievements: achiev?.c || 0,
+    };
   }
 
-  if (pathname === '/api/channels') {
-    const all = channelManager.getAllTokens();
+  if (pathname === '/api/calendar') {
+    const events = calendar.getUpcoming(50);
+    // Enrich with notification status
+    const enriched = events.map(e => {
+      const notifs = db.prepare(
+        'SELECT * FROM event_notifications WHERE event_id = ? ORDER BY notify_at'
+      ).all(e.id);
+      const rsvps = calendar.getRsvps(e.id);
+      return { ...e, notifications: notifs, rsvpCount: rsvps.length };
+    });
+    return { events: enriched };
+  }
+
+  if (pathname === '/api/rss') {
+    const feeds = rssFeeds.getAll();
     return {
-      channels: all.map(c => ({
-        name: c.channelName, code: c.channelCode, source: c.source
-      }))
+      feeds: feeds.map(f => {
+        const seenCount = db.prepare('SELECT COUNT(*) as c FROM rss_seen WHERE feed_id = ?').get(f.id);
+        const lastItem  = db.prepare('SELECT item_title, seen_at FROM rss_seen WHERE feed_id = ? ORDER BY seen_at DESC LIMIT 1').get(f.id);
+        return {
+          ...f,
+          channelName: channelManager.getChannelName(f.channel_id) || f.channel_id,
+          seenCount:   seenCount?.c || 0,
+          lastItemTitle: lastItem?.item_title || null,
+          lastItemAt:    lastItem?.seen_at    || null,
+        };
+      })
+    };
+  }
+
+  if (pathname === '/api/agent') {
+    try {
+      const agentDb = require('../agent/database').getDb();
+      if (!agentDb) return { enabled: false };
+
+      const convCount  = agentDb.prepare('SELECT COUNT(*) as c FROM conversations').get();
+      const memCount   = agentDb.prepare('SELECT COUNT(*) as c FROM memory').get();
+      const toolCount  = agentDb.prepare('SELECT COUNT(*) as c FROM tool_log').get();
+      const toolStats  = agentDb.prepare(
+        'SELECT tool_name, COUNT(*) as count FROM tool_log GROUP BY tool_name ORDER BY count DESC'
+      ).all();
+      const recentTools = agentDb.prepare(
+        'SELECT tool_name, arguments, result, timestamp FROM tool_log ORDER BY timestamp DESC LIMIT 20'
+      ).all();
+      const channelConvs = agentDb.prepare(
+        'SELECT channel_id, COUNT(*) as count FROM conversations GROUP BY channel_id ORDER BY count DESC'
+      ).all();
+      const digestStats = agentDb.prepare('SELECT * FROM rss_digests WHERE active = 1').all();
+
+      return {
+        enabled:      true,
+        agentName:    process.env.AGENT_NAME || 'Bob',
+        model:        process.env.OLLAMA_MODEL || 'unknown',
+        ollamaUrl:    process.env.OLLAMA_URL || '',
+        searxngUrl:   process.env.SEARXNG_URL || '',
+        totalConversations: convCount?.c || 0,
+        totalMemories:      memCount?.c  || 0,
+        totalToolCalls:     toolCount?.c || 0,
+        toolStats,
+        recentTools,
+        channelConversations: channelConvs.map(c => ({
+          channelName: channelManager.getChannelName(c.channel_id) || c.channel_id,
+          count: c.count,
+        })),
+        digests: digestStats,
+      };
+    } catch {
+      return { enabled: false };
+    }
+  }
+
+  if (pathname === '/api/health') {
+
+    const pingOllama = () => new Promise(resolve => {
+      const start = Date.now();
+      const url   = new URL('/api/tags', process.env.OLLAMA_URL || 'http://localhost:11434');
+      const lib   = url.protocol === 'https:' ? https : http;
+      const req   = lib.get(url.toString(), res => {
+        res.resume();
+        resolve({ ok: res.statusCode === 200, ms: Date.now() - start });
+      });
+      req.on('error', () => resolve({ ok: false, ms: Date.now() - start }));
+      req.setTimeout(3000, () => { req.destroy(); resolve({ ok: false, ms: 3000, error: 'timeout' }); });
+    });
+
+    const pingSearxng = () => new Promise(resolve => {
+      if (!process.env.SEARXNG_URL) return resolve({ ok: false, disabled: true });
+      const start = Date.now();
+      const url   = new URL('/search?q=test&format=json', process.env.SEARXNG_URL);
+      const lib   = url.protocol === 'https:' ? https : http;
+      const req   = lib.get(url.toString(), { headers: { Accept: 'application/json' } }, res => {
+        res.resume();
+        resolve({ ok: res.statusCode === 200, ms: Date.now() - start });
+      });
+      req.on('error', () => resolve({ ok: false, ms: Date.now() - start }));
+      req.setTimeout(3000, () => { req.destroy(); resolve({ ok: false, ms: 3000, error: 'timeout' }); });
+    });
+
+    const [ollama, searxng] = await Promise.all([pingOllama(), pingSearxng()]);
+    return {
+      ollama: { ...ollama, url: process.env.OLLAMA_URL || 'http://localhost:11434' },
+      searxng,
+      bot: { ok: true, uptime: Math.floor(process.uptime()) },
     };
   }
 
@@ -247,7 +347,7 @@ function startDashboard(bot, channelManager) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Unauthorized' }));
       }
-      const data = getApiData(pathname, session, bot, channelManager);
+      const data = await getApiData(pathname, session, bot, channelManager);
       if (data === null) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'Not found' }));
