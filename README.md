@@ -47,13 +47,13 @@ A fully featured community bot for [Haven](https://github.com/ancsemi/Haven) sel
 
 ### 🤖 AI Agent (Optional)
 - **Natural language interface** — chat with the AI Agent using a configurable slash command (e.g. `/bob`)
+- **Powered by Ollama** — runs locally, no cloud dependencies
 - **Web search** — answers grounded in real-time results via SearXNG
 - **Persistent memory** — remembers facts across conversations and restarts
 - **Conversation history** — multi-turn context so the agent follows long discussions
 - **Tool integration** — agent can create calendar events, fetch leaderboards, play sounds, and list RSS feeds
 - **Participation modes** — `command`, `mention`, `passive`, or `active`
 - **Per-channel personas** — different name, prompt, and mode per channel at runtime
-- **Powered by Ollama** — runs locally, no cloud dependencies
 
 ---
 
@@ -233,6 +233,29 @@ src/
 ## Environment Variables
 
 See [`.env.example`](.env.example) for the full reference with descriptions.
+
+---
+
+## Security
+
+### Database File Permissions
+Haven Bot stores sensitive data in two SQLite files:
+- `haven-bot.db` — contains webhook tokens for any runtime-added channels (via `/addchannel`)
+- `haven-agent.db` — contains conversation history and persistent memory
+
+Restrict read access to these files, especially on shared systems:
+
+```bash
+chmod 600 haven-bot.db haven-agent.db
+```
+
+For Docker deployments, ensure your data volume is not world-readable.
+
+### Webhook Tokens
+Tokens configured via `WEBHOOK_TOKENS` in `.env` are only stored in memory. Tokens added at runtime via `/addchannel` are stored in plaintext in `haven-bot.db`. If you prefer, you can keep all tokens in `.env` and restart the bot when adding new channels — the database channel feature is optional.
+
+### Callback Secret
+Always set `CALLBACK_SECRET` in production. This enables HMAC-SHA256 verification of incoming slash command payloads, preventing spoofed commands from external sources.
 
 ---
 

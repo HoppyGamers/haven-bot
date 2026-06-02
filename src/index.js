@@ -307,6 +307,11 @@ bot.on('command', async (data) => {
 \`/customcommands\` - List all custom commands
 *(Use \`/addcommand\`, \`/editcommand\`, \`/removecommand\` to manage)*
 
+**Channel Management (Admin Only):**
+\`/addchannel <name> <code> <token>\` - Add a new channel without restart
+\`/removechannel <code>\` - Remove a DB-managed channel
+\`/channels\` - List all configured channels
+
 **Fun:**
 \`/ping\` - Test the bot
 \`/help\` - This message${agentSection}
@@ -488,6 +493,10 @@ async function main() {
     { command: 'addcommand',   description: 'Create a custom command' },
     { command: 'editcommand',  description: 'Edit a custom command' },
     { command: 'removecommand',description: 'Delete a custom command' },
+    // Channel management
+    { command: 'addchannel',    description: 'Add a new channel to the bot (admin)' },
+    { command: 'removechannel', description: 'Remove a channel from the bot (admin)' },
+    { command: 'channels',      description: 'List all configured channels (admin)' },
     // Fun
     { command: 'ping',       description: 'Test the bot' },
     { command: 'help',       description: 'Show all available commands' },

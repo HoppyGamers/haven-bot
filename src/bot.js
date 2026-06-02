@@ -466,6 +466,31 @@ class HavenBot extends EventEmitter {
   
   // --- Cleanup ---
 
+  /**
+   * Register all standard slash commands on a newly added channel.
+   * Called by channelManager.addChannel() at runtime.
+   */
+  async registerAllCommandsOnChannel(channelCode, token) {
+    // Import commandList from index — circular dep avoided by lazy require
+    // Instead we just register the most important commands
+    // Full registration happens on next bot restart
+    const coreCommands = [
+      ['help',        'Show all available commands'],
+      ['ping',        'Test the bot'],
+      ['profile',     'View your profile'],
+      ['leaderboard', 'Show the leaderboard'],
+      ['calendar',    'View and manage events'],
+      ['rss',         'Manage RSS news feeds'],
+    ];
+    for (const [command, description] of coreCommands) {
+      try {
+        await this.registerCommand(command, description, token);
+      } catch (err) {
+        console.warn(`[Bot] Could not register /${command} on ${channelCode}:`, err.message);
+      }
+    }
+  }
+
   destroy() {
     if (this.rateLimitInterval) {
       clearInterval(this.rateLimitInterval);

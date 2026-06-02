@@ -36,6 +36,18 @@ function initializeDatabase() {
   `);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS bot_channels (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id  TEXT UNIQUE NOT NULL,
+      channel_name TEXT NOT NULL,
+      token       TEXT NOT NULL,
+      active      BOOLEAN DEFAULT 1,
+      added_by    TEXT,
+      added_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS user_stats (
       id INTEGER PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -788,6 +800,35 @@ const rssFeeds = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Bot channels (runtime-managed webhook channels)
+// ---------------------------------------------------------------------------
+const botChannels = {
+  add(channelId, channelName, token, addedBy = 'system') {
+    return db.prepare(`
+      INSERT INTO bot_channels (channel_id, channel_name, token, added_by)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(channel_id) DO UPDATE SET
+        channel_name = excluded.channel_name,
+        token = excluded.token,
+        active = 1,
+        added_by = excluded.added_by
+    `).run(channelId, channelName, token, addedBy);
+  },
+
+  remove(channelId) {
+    return db.prepare('UPDATE bot_channels SET active = 0 WHERE channel_id = ?').run(channelId);
+  },
+
+  getAll() {
+    return db.prepare('SELECT * FROM bot_channels WHERE active = 1 ORDER BY added_at').all();
+  },
+
+  getById(channelId) {
+    return db.prepare('SELECT * FROM bot_channels WHERE channel_id = ? AND active = 1').get(channelId);
+  },
+};
+
 module.exports = {
   db,
   initializeDatabase,
@@ -802,4 +843,5 @@ module.exports = {
   customCommands,
   calendar,
   rssFeeds,
+  botChannels,
 };
