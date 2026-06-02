@@ -133,10 +133,10 @@
 
 <main class="main">
   <div id="page-overview" class="page active"><div class="page-header"><h1>Overview</h1><p>Bot status and quick stats</p></div><div id="overview-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-  <div id="page-channels" class="page"><div class="page-header"><h1>Channels</h1><p>Configured Haven channels</p></div><div id="channels-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-channels" class="page"><div id="channels-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
   <div id="page-users" class="page"><div class="page-header"><h1>Users</h1><p>XP leaderboard and statistics</p></div><div id="users-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-  <div id="page-calendar" class="page"><div class="page-header"><h1>Calendar</h1><p>Upcoming events and notifications</p></div><div id="calendar-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
-  <div id="page-rss" class="page"><div class="page-header"><h1>RSS Feeds</h1><p>Monitored news feeds</p></div><div id="rss-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-calendar" class="page"><div id="calendar-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+  <div id="page-rss" class="page"><div id="rss-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
   <div id="page-modlog" class="page"><div class="page-header"><h1>Moderation Log</h1><p>Recent moderation actions</p></div><div id="modlog-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
   <div id="page-settings" class="page"><div class="page-header"><h1>Settings</h1><p>Runtime configuration — changes apply immediately without restart</p></div><div id="settings-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
 
@@ -275,14 +275,24 @@ function renderHealth(el, d) {
 
 // ── Channels ──────────────────────────────────────────────────────────────────
 function renderChannels(el, d) {
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-title">Configured Channels (${d.channels.length})</div>
-      <div class="channel-list">
-        ${d.channels.map(c=>`<div class="channel-item"><div><div class="channel-name">${c.name}</div><div class="channel-code">${c.code}</div></div>${badge(c.source==='env'?'📄 env':'🗄️ database',c.source==='env'?'blue':'gray')}</div>`).join('')}
-      </div>
-      <p style="margin-top:16px;font-size:12px;color:var(--muted)">Add channels with <code>/addchannel</code> in Haven. No restart required.</p>
-    </div>`;
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h1 style="font-size:22px;font-weight:700">Channels</h1><p style="color:var(--muted);font-size:14px;margin-top:4px">Configured Haven channels</p></div>
+    <button class="btn btn-primary" onclick="showAddChannel()">+ Add Channel</button>
+  </div>
+  <div class="card">
+    <div class="card-title">Configured Channels (${d.channels.length})</div>
+    <div class="channel-list">
+      ${d.channels.map(c=>`<div class="channel-item">
+        <div><div class="channel-name">${c.name}</div><div class="channel-code">${c.code}</div></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${badge(c.source==='env'?'📄 env':'🗄️ database',c.source==='env'?'blue':'gray')}
+          ${c.source!=='env'?`<button class="btn btn-danger btn-sm" onclick="deleteChannel('${c.code}','${c.name}')">Remove</button>`:''}
+        </div>
+      </div>`).join('')}
+    </div>
+    <p style="margin-top:16px;font-size:12px;color:var(--muted)">Env-configured channels cannot be removed here — edit WEBHOOK_TOKENS in .env instead.</p>
+  </div>`;
+  el.innerHTML=html;
 }
 
 // ── Users ──────────────────────────────────────────────────────────────────────
@@ -313,58 +323,66 @@ function renderUsers(el, d) {
 
 // ── Calendar ──────────────────────────────────────────────────────────────────
 function renderCalendar(el, d) {
-  if (!d.events?.length) { el.innerHTML=`<div class="card"><div class="empty">No upcoming events</div></div>`; return; }
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-title">Upcoming Events (${d.events.length})</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>ID</th><th>Title</th><th>Date & Time</th><th>RSVPs</th><th>Notifications</th><th>Created By</th></tr></thead>
-          <tbody>
-            ${d.events.map(e=>{
-              const pendingNotifs = (e.notifications||[]).filter(n=>!n.sent).length;
-              const sentNotifs    = (e.notifications||[]).filter(n=>n.sent).length;
-              return `<tr>
-                <td class="mono" style="color:var(--muted)">#${e.id}</td>
-                <td style="font-weight:500">${e.title}</td>
-                <td>${fmt(e.event_time)}</td>
-                <td>${e.rsvpCount||0}</td>
-                <td>${sentNotifs>0?badge(`${sentNotifs} sent`,'green'):''}${pendingNotifs>0?` ${badge(`${pendingNotifs} pending`,'yellow')}`:''}</td>
-                <td style="color:var(--muted)">${e.created_by||'—'}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h1 style="font-size:22px;font-weight:700">Calendar</h1><p style="color:var(--muted);font-size:14px;margin-top:4px">Upcoming events and notifications</p></div>
+    <button class="btn btn-primary" onclick="showCreateEvent()">+ Create Event</button>
+  </div>`;
+  if (!d.events?.length) { el.innerHTML=html+`<div class="card"><div class="empty">No upcoming events</div></div>`; return; }
+  html += `<div class="card"><div class="card-title">Upcoming Events (${d.events.length})</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Title</th><th>Date & Time</th><th>RSVPs</th><th>Notifications</th><th>Created By</th><th>Actions</th></tr></thead>
+      <tbody>${d.events.map(e=>{
+        const pendingNotifs=(e.notifications||[]).filter(n=>!n.sent).length;
+        const sentNotifs=(e.notifications||[]).filter(n=>n.sent).length;
+        const safeTitle=e.title.replace(/'/g,"\\'");
+        return `<tr>
+          <td class="mono" style="color:var(--muted)">#${e.id}</td>
+          <td style="font-weight:500">${e.title}</td>
+          <td>${fmt(e.event_time)}</td>
+          <td>${e.rsvpCount||0}</td>
+          <td>${sentNotifs>0?badge(sentNotifs+' sent','green'):''}${pendingNotifs>0?' '+badge(pendingNotifs+' pending','yellow'):''}</td>
+          <td style="color:var(--muted)">${e.created_by||'—'}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="showEditEvent(${e.id},'${safeTitle}','${e.event_time}')">Edit</button>
+            <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteEvent(${e.id},'${safeTitle}')">Delete</button>
+          </td>
+        </tr>`}).join('')}
+      </tbody>
+    </table></div></div>`;
+  el.innerHTML=html;
 }
 
 // ── RSS ───────────────────────────────────────────────────────────────────────
 function renderRSS(el, d) {
-  if (!d.feeds?.length) { el.innerHTML=`<div class="card"><div class="empty">No RSS feeds configured</div></div>`; return; }
-  el.innerHTML = `
-    <div class="card">
-      <div class="card-title">RSS Feeds (${d.feeds.length})</div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>ID</th><th>Feed</th><th>Channel</th><th>Items Seen</th><th>Status</th><th>Last Checked</th></tr></thead>
-          <tbody>
-            ${d.feeds.map(f=>`<tr>
-              <td class="mono" style="color:var(--muted)">#${f.id}</td>
-              <td>
-                <div style="font-weight:500">${f.title||'Untitled'}</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:2px">${f.url}</div>
-                ${f.lastItemTitle?`<div style="font-size:11px;color:var(--muted);margin-top:1px;font-style:italic">Last: ${f.lastItemTitle.slice(0,60)}...</div>`:''}
-              </td>
-              <td style="font-weight:500">${f.channelName}</td>
-              <td class="mono">${num(f.seenCount)}</td>
-              <td>${badge(f.active?'active':'paused',f.active?'green':'yellow')}</td>
-              <td style="color:var(--muted)">${fmt(f.last_checked)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h1 style="font-size:22px;font-weight:700">RSS Feeds</h1><p style="color:var(--muted);font-size:14px;margin-top:4px">Monitored news feeds</p></div>
+    <button class="btn btn-primary" onclick="showAddFeed()">+ Add Feed</button>
+  </div>`;
+  if (!d.feeds?.length) { el.innerHTML=html+`<div class="card"><div class="empty">No RSS feeds configured</div></div>`; return; }
+  html += `<div class="card"><div class="card-title">RSS Feeds (${d.feeds.length})</div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>Feed</th><th>Channel</th><th>Items Seen</th><th>Status</th><th>Last Checked</th><th>Actions</th></tr></thead>
+      <tbody>${d.feeds.map(f=>{
+        const safeTitle=(f.title||f.url||'').replace(/'/g,"\\'");
+        return `<tr>
+          <td class="mono" style="color:var(--muted)">#${f.id}</td>
+          <td>
+            <div style="font-weight:500">${f.title||'Untitled'}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${f.url}</div>
+            ${f.lastItemTitle?`<div style="font-size:11px;color:var(--muted);margin-top:1px;font-style:italic">Last: ${f.lastItemTitle.slice(0,60)}...</div>`:''}
+          </td>
+          <td style="font-weight:500">${f.channelName}</td>
+          <td class="mono">${num(f.seenCount)}</td>
+          <td>${badge(f.active?'active':'paused',f.active?'green':'yellow')}</td>
+          <td style="color:var(--muted)">${fmt(f.last_checked)}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="toggleFeed(${f.id},${f.active})">${f.active?'Pause':'Resume'}</button>
+            <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteFeed(${f.id},'${safeTitle}')">Remove</button>
+          </td>
+        </tr>`}).join('')}
+      </tbody>
+    </table></div></div>`;
+  el.innerHTML=html;
 }
 
 // ── Modlog ────────────────────────────────────────────────────────────────────
