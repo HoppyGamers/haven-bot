@@ -12,6 +12,7 @@ const channelManager     = require('./channels');
 
 // Agent — loaded only when AGENT_ENABLED=true
 const AGENT_ENABLED = (process.env.AGENT_ENABLED || 'false').toLowerCase() === 'true';
+const DASHBOARD_ENABLED = !!process.env.DASHBOARD_SECRET;
 
 // ---------------------------------------------------------------------------
 // Auto-delete helpers
@@ -24,7 +25,7 @@ const USER_DELETE_SECS  = parseInt(process.env.USER_DELETE_SECONDS  || '0', 10);
 const ADMIN_COMMANDS = new Set([
   'ban','kick','warn','mute','unmute','unban','modlog','addadmin','removeadmin',
   'addcommand','editcommand','removecommand',
-  'addchannel','removechannel','channels',
+  'addchannel','removechannel','channels','dashboard',
 ]);
 
 // RSS/calendar admin subcommands that should auto-delete
@@ -303,6 +304,39 @@ bot.on('command', async (data) => {
       await rssCommands.rssRouter(channelBot, { ...enrichedData, rawBot: bot });
       break;
 
+    // --- Dashboard token ---
+    case 'dashboard': {
+      const { admins: dashAdmins } = require('./database');
+      if (!dashAdmins.isAdmin(enrichedData.user_id.toString())) {
+        await channelBot.sendMessage('❌ **Permission Denied** — admin only.');
+        break;
+      }
+      const subCmd = (enrichedData.args[0] || '').toLowerCase();
+      if (subCmd === 'token') {
+        if (!DASHBOARD_ENABLED) {
+          await channelBot.sendMessage('❌ Dashboard is not enabled. Set `DASHBOARD_SECRET` in your `.env` to enable it.');
+          break;
+        }
+        const { createLoginToken } = require('./dashboard/server');
+        const token = createLoginToken(enrichedData.user_id, enrichedData.user);
+        const port  = process.env.DASHBOARD_PORT || '3003';
+        await channelBot.sendMessage(
+          `🌐 **Dashboard Login Token**\n\n` +
+          `Visit: \`http://your-server:${port}\`\n` +
+          `Token: \`${token}\`\n\n` +
+          `⚠️ **Security Warning:** This token is visible to anyone in this channel. ` +
+          `Use it immediately then dismiss this message. ` +
+          `The token expires in 24 hours and is single-use.`
+        );
+      } else {
+        await channelBot.sendMessage(
+          `🌐 **Dashboard Commands** (admin only)\n\n` +
+          `\`/dashboard token\` — generate a login token`
+        );
+      }
+      break;
+    }
+
     // --- Channel management (admin only) ---
     case 'addchannel': {
       const { admins: chanAdmins } = require('./database');
@@ -440,6 +474,7 @@ bot.on('command', async (data) => {
 \`/addchannel <name> <code> <token>\` - Add a new channel without restart
 \`/removechannel <code>\` - Remove a DB-managed channel
 \`/channels\` - List all configured channels
+\`/dashboard token\` - Generate a web dashboard login token\n⚠️ Token is posted publicly in channel — use immediately and delete the message
 
 **Fun:**
 \`/ping\` - Test the bot
@@ -572,10 +607,19 @@ bot.on('error', (err) => {
 async function main() {
   await bot.init();
 
+  // Load runtime-added channels from database
+  channelManager.loadFromDatabase();
+
   // Load agent if enabled
   if (AGENT_ENABLED) {
     agentModule = require('./agent/agent');
     await agentModule.initAgent(bot, channelManager);
+  }
+
+  // Start web dashboard
+  if (DASHBOARD_ENABLED) {
+    const { startDashboard } = require('./dashboard/server');
+    startDashboard(bot, channelManager);
   }
 
   // Start notification runner
@@ -623,6 +667,7 @@ async function main() {
     { command: 'editcommand',  description: 'Edit a custom command' },
     { command: 'removecommand',description: 'Delete a custom command' },
     // Channel management
+    { command: 'dashboard',     description: 'Web dashboard commands (admin)' },
     { command: 'addchannel',    description: 'Add a new channel to the bot (admin)' },
     { command: 'removechannel', description: 'Remove a channel from the bot (admin)' },
     { command: 'channels',      description: 'List all configured channels (admin)' },

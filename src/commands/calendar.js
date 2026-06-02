@@ -397,12 +397,16 @@ async function calendarRouter(bot, data) {
       return bot.sendMessage(
         `📅 **Calendar Commands**\n\n` +
         `\`/calendar add <date> <time> <title> [--notify <offsets>]\` — create event\n` +
-        `\`/calendar list\` — upcoming events\n` +
+        `  • Date format: \`YYYY-MM-DD\` (e.g. \`2026-07-05\`)\n` +
+        `  • Time format: \`HH:MM\` 24hr (e.g. \`14:30\` for 2:30 PM)\n` +
+        `  • Notify offsets: \`1d\` \`6h\` \`30m\` — days/hours/minutes before event\n` +
+        `  • Example: \`/calendar add 2026-07-05 09:00 British Grand Prix --notify 1d 6h 30m\`\n\n` +
+        `\`/calendar list\` — upcoming events in this channel\n` +
+        `\`/calendar list all\` — all events across all channels (admin)\n` +
         `\`/calendar view <id>\` — event details + attendees\n` +
-        `\`/calendar edit <id> <field> <value>\` — edit event\n` +
-        `\`/calendar delete <id>\` — delete event\n` +
-        `\`/rsvp <id>\` — toggle attendance\n\n` +
-        `Notify offsets: \`1d\` \`6h\` \`30m\` (days/hours/minutes before event)`
+        `\`/calendar edit <id> <field> <value>\` — edit event (admin)\n` +
+        `\`/calendar delete <id>\` — delete event (admin)\n` +
+        `\`/rsvp <id>\` — toggle attendance`
       );
   }
 }

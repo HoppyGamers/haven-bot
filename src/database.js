@@ -458,6 +458,10 @@ const modLogs = {
   getLogs(channelId, limit = 50) {
     return db.prepare('SELECT * FROM mod_logs WHERE channel_id = ? ORDER BY timestamp DESC LIMIT ?').all(channelId, limit);
   },
+
+  getAll(limit = 50) {
+    return db.prepare('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT ?').all(limit);
+  },
 };
 
 // ---------------------------------------------------------------------------
