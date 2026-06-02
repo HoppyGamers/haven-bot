@@ -670,9 +670,11 @@ const calendar = {
 
   // Notifications
   addNotification(eventId, notifyAtUtc, offsetLabel) {
+    // Convert ISO string to SQLite datetime format (no T, no Z, no ms)
+    const sqliteDate = notifyAtUtc.replace('T', ' ').replace(/\.\d+Z$/, '').replace('Z', '');
     return db.prepare(
       'INSERT INTO event_notifications (event_id, notify_at, offset_label) VALUES (?, ?, ?)'
-    ).run(eventId, notifyAtUtc, offsetLabel);
+    ).run(eventId, sqliteDate, offsetLabel);
   },
 
   clearNotifications(eventId) {
