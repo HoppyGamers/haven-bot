@@ -46,6 +46,8 @@ function buildReminderMessage(notification) {
  * @param {HavenBot} bot - bot instance with sendMessage method
  * @param {number} intervalMs - how often to check (default 60s)
  */
+const AGENT_ENABLED = (process.env.AGENT_ENABLED || 'false').toLowerCase() === 'true';
+
 function startNotifier(bot, intervalMs = 60000) {
   console.log(`🔔 Notification runner started (checking every ${intervalMs / 1000}s)`);
 
@@ -59,6 +61,14 @@ function startNotifier(bot, intervalMs = 60000) {
           await bot.sendMessage(message, notification.channel_id);
           calendar.markNotificationSent(notification.id);
           console.log(`✅ Notification sent for event ${notification.event_id} (${notification.title})`);
+
+          // Fire AI briefing if agent is enabled (non-blocking)
+          if (AGENT_ENABLED) {
+            const { sendEventBriefing } = require('./agent/briefing');
+            sendEventBriefing(bot, notification).catch(err => {
+              console.error('[Briefing] Non-fatal error:', err.message);
+            });
+          }
         } catch (err) {
           console.error(`❌ Failed to send notification ${notification.id}:`, err.message);
         }
