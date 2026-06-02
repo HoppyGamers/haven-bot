@@ -380,4 +380,28 @@ ${party.length === 0 ? 'No investigators present.' : party.map(p =>
   },
 };
 
+/**
+ * Get a system definition by key.
+ */
+function getSystem(key) {
+  return SYSTEMS[key] || SYSTEMS.dnd5e;
+}
+
+/**
+ * List all available systems.
+ */
+function listSystems() {
+  return Object.entries(SYSTEMS).map(([key, s]) => ({
+    key, name: s.name, description: s.description
+  }));
+}
+
+/**
+ * Build the DM system prompt for a campaign.
+ */
+function buildDmPrompt(campaign, party) {
+  const system = getSystem(campaign.system);
+  return system.dmPrompt(campaign, party, campaign.scene);
+}
+
 module.exports = { getSystem, listSystems, buildDmPrompt, SYSTEMS };
