@@ -16,7 +16,8 @@ services:
     ports:
       # Callback server — Haven POSTs slash command events here.
       # Must match the port in your CALLBACK_URL env var.
-      - "3000:3000"
+      # Haven uses ports 3000 and 3001 internally — using 3002 to avoid conflicts.
+      - "3002:3002"
 
       # Web dashboard — access at http://your-server:3003
       # Only exposed when DASHBOARD_SECRET is set in .env
