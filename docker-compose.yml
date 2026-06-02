@@ -14,10 +14,14 @@ services:
       - haven_data:/data
 
     ports:
-      # Expose the callback server so Haven can POST slash command events.
-      # Change the left side (host port) if 3000 is already in use.
+      # Callback server — Haven POSTs slash command events here.
       # Must match the port in your CALLBACK_URL env var.
       - "3000:3000"
+
+      # Web dashboard — access at http://your-server:3003
+      # Only exposed when DASHBOARD_SECRET is set in .env
+      # Remove or comment out if you don't want the dashboard accessible externally.
+      - "3003:3003"
 
     logging:
       driver: json-file
