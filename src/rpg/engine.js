@@ -8,6 +8,7 @@ const { chat }         = require('../agent/ollama');
 const { roll, formatRoll, abilityMod, formatMod, rollCharacterStats } = require('./dice');
 const { buildDmPrompt, getSystem, listSystems } = require('./systems');
 const { campaigns, characters, gameLog, combat, sessions, getDb } = require('./database');
+const { generateAscii, formatAscii, getPrebuilt } = require('./ascii');
 
 // ---------------------------------------------------------------------------
 // Message parsing
@@ -192,7 +193,15 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
 
       const cleanedOpen = cleanDmResponse(response);
       gameLog.add(campaign.id, 'dm', cleanedOpen, agentConfig.agentName, null, sessionId);
-      return bot.sendMessage(`🎲 **${campaign.name}**\n\n${cleanedOpen}`);
+      await bot.sendMessage(`🎲 **${campaign.name}**\n\n${cleanedOpen}`);
+
+      // Generate opening scene ASCII art
+      try {
+        const artSubject = campaign.scene?.slice(0, 80) || campaign.name;
+        const art = await generateAscii(artSubject, agentConfig.ollamaUrl, agentConfig.ollamaModel, 'scene');
+        if (art) await bot.sendMessage(formatAscii(art));
+      } catch {}
+      return;
     }
 
     case 'status': {
@@ -303,6 +312,22 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
       );
     }
 
+    case 'art': {
+      const subject = parts.slice(1).join(' ').trim();
+      if (!subject) return bot.sendMessage(`❌ **Usage:** \`${agentConfig.agentName} rpg art <subject>\`\nExample: \`${agentConfig.agentName} rpg art ancient dragon\``);
+      await bot.sendMessage(`_Generating ASCII art..._`);
+      const style = /map|dungeon|room|area/i.test(subject) ? 'map' :
+                    /monster|creature|dragon|beast|enemy/i.test(subject) ? 'monster' :
+                    /sword|shield|staff|item|weapon|armor/i.test(subject) ? 'item' : 'scene';
+      try {
+        const art = await generateAscii(subject, agentConfig.ollamaUrl, agentConfig.ollamaModel, style);
+        if (art) return bot.sendMessage(formatAscii(art, subject));
+        return bot.sendMessage(`❌ Could not generate art for: ${subject}`);
+      } catch (err) {
+        return bot.sendMessage(`❌ Art generation failed: ${err.message}`);
+      }
+    }
+
     case 'help': {
       return bot.sendMessage(
         `⚔️ **${agentConfig.agentName} RPG Commands**\n\n` +
@@ -407,6 +432,15 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
     campaigns.updateScene(campaign.id, cleaned.slice(0, 500));
 
     await bot.sendMessage(`⚔️ **${agentConfig.agentName}:** ${cleaned}`);
+
+    // Generate ASCII art for significant scene moments
+    const artTrigger = inferArtTrigger(cleaned);
+    if (artTrigger) {
+      try {
+        const art = await generateAscii(artTrigger.subject, agentConfig.ollamaUrl, agentConfig.ollamaModel, artTrigger.style);
+        if (art) await bot.sendMessage(formatAscii(art, artTrigger.label));
+      } catch {}
+    }
 
   } catch (err) {
     if (thinkingMsg?.message_id) {
@@ -513,6 +547,38 @@ function inferRollFromAction(actionText, char) {
   }
 
   return null; // No roll needed
+}
+
+/**
+ * Detect significant scene moments that warrant ASCII art.
+ * Returns { subject, style, label } or null.
+ */
+function inferArtTrigger(dmText) {
+  const text = dmText.toLowerCase();
+
+  // Combat encounter — monster/enemy appears
+  const monsterMatch = dmText.match(/(?:a|an|the)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:emerges|appears|attacks|lunges|charges|snarls|roars|steps out|bursts)/);
+  if (monsterMatch) {
+    return { subject: monsterMatch[1], style: 'monster', label: monsterMatch[1] };
+  }
+
+  // Entering a significant location
+  const locationMatch = dmText.match(/(?:you enter|you step into|you arrive at|before you stands?|you find yourself in)\s+(?:a|an|the)\s+([^.,!?]{5,40})/i);
+  if (locationMatch) {
+    const loc = locationMatch[1].trim();
+    if (/dungeon|cave|castle|tavern|forest|crypt|temple|tower|ruins|chamber/i.test(loc)) {
+      return { subject: loc, style: 'scene', label: loc };
+    }
+  }
+
+  // Dramatic reveal
+  if (/massive|enormous|ancient|towering|crumbling|ominous|foreboding/i.test(text) &&
+      /structure|building|creature|beast|door|gate|altar|throne/i.test(text)) {
+    const words = dmText.split(/[.,!?]/)[0];
+    if (words.length < 80) return { subject: words.trim(), style: 'scene', label: null };
+  }
+
+  return null;
 }
 
 /**
