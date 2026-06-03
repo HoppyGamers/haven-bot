@@ -8,6 +8,7 @@ const { chat }         = require('../agent/ollama');
 const { roll, formatRoll, abilityMod, formatMod, rollCharacterStats } = require('./dice');
 const { buildDmPrompt, buildArcPrompt, getSystem, listSystems } = require('./systems');
 const { campaigns, characters, gameLog, combat, sessions, getDb } = require('./database');
+const { generateImage, shouldGenerateImage } = require('./images');
 
 // ---------------------------------------------------------------------------
 // Message parsing
@@ -503,7 +504,6 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
 
     // Generate image for significant scene moments
     if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
-      const { shouldGenerateImage } = require('./images');
       const imgTrigger = shouldGenerateImage(cleaned, campaign.system);
       if (imgTrigger) {
         console.log(`[RPG Images] Generating action image: ${imgTrigger.prompt.slice(0, 50)}...`);
