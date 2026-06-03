@@ -568,16 +568,8 @@ if (AGENT_ENABLED) {
         : false;
 
       if (!isEnabledForChannel(channel_id, agentDb)) return;
-      if (!shouldRespond(msgData, config)) return;
-      console.log(`[Agent] Mode ${config.mode} triggered for: ${content.slice(0, 50)}`);
 
-      // Extract the actual question (strips agent name for mention mode)
-      const question = extractQuestion(content, config.agentName);
-      if (!question) return;
-
-      recordResponse(channel_id);
-
-      // Build a channelBot proxy for this message
+      // Build channelBot proxy early so RPG can use it regardless of cooldown
       const channelBot = new Proxy(bot, {
         get(target, prop) {
           if (prop === 'sendMessage') {
@@ -593,30 +585,35 @@ if (AGENT_ENABLED) {
         }
       });
 
-      // Check if this is an RPG message before passing to agent
+      // RPG commands bypass the agent cooldown — they are explicit commands not chat
       if (RPG_ENABLED) {
         const { parseMessage, handleCommand, handleAction, handleQuestion } = require('./rpg/engine');
         const agentConf = require('./agent/config').getChannelConfig(channel_id, agentDb);
         const parsed = parseMessage(content, agentConf.agentName, user_id);
         if (parsed.type === 'command' || parsed.type === 'action' || parsed.type === 'roll' || parsed.type === 'question') {
-          recordResponse(channel_id); // prevent duplicate rapid-fire commands
+          recordResponse(channel_id);
+          if (parsed.type === 'command')  return handleCommand(channelBot, channel_id, user_id, user, parsed.command, agentConf);
+          if (parsed.type === 'action')   return handleAction(channelBot, channel_id, user_id, user, parsed.content, agentConf);
+          if (parsed.type === 'roll') {
+            const { roll, formatRoll } = require('./rpg/dice');
+            const result = roll(parsed.expression);
+            return channelBot.sendMessage(formatRoll(result, `${user} rolls`));
+          }
+          if (parsed.type === 'question') return handleQuestion(channelBot, channel_id, user_id, user, parsed.content, agentConf);
         }
-        if (parsed.type === 'command') {
-          return handleCommand(channelBot, channel_id, user_id, user, parsed.command, agentConf);
-        }
-        if (parsed.type === 'action') {
-          return handleAction(channelBot, channel_id, user_id, user, parsed.content, agentConf);
-        }
-        if (parsed.type === 'roll') {
-          const { roll, formatRoll } = require('./rpg/dice');
-          const result = roll(parsed.expression);
-          return channelBot.sendMessage(formatRoll(result, `${user} rolls`));
-        }
-        if (parsed.type === 'question') {
-          return handleQuestion(channelBot, channel_id, user_id, user, parsed.content, agentConf);
-        }
-        // type === 'ignore' — not directed at DM, fall through to normal agent
+        // type === 'ignore' — fall through to normal agent
       }
+
+      if (!shouldRespond(msgData, config)) return;
+      console.log(`[Agent] Mode ${config.mode} triggered for: ${content.slice(0, 50)}`);
+
+      // Extract the actual question (strips agent name for mention mode)
+      const question = extractQuestion(content, config.agentName);
+      if (!question) return;
+
+      recordResponse(channel_id);
+
+      // type === 'ignore' — not directed at DM, fall through to normal agent
 
       // Route to agent handler
       await agentMod.handleAgentCommand(channelBot, {
