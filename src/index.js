@@ -323,7 +323,7 @@ bot.on('command', async (data) => {
         const port  = process.env.DASHBOARD_PORT || '3003';
         await channelBot.sendMessage(
           `🌐 **Dashboard Login Token**\n\n` +
-          `Visit: \`http://your-server:${port}\`\n` +
+          `Visit: \`${process.env.DASHBOARD_URL || `http://${require('os').hostname()}:${port}`}\`\n` +
           `Token: \`${token}\`\n\n` +
           `_Only visible to you — expires in 24 hours._`,
           { ephemeral: true, recipient_id: enrichedData.user_id }
