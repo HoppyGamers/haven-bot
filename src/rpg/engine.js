@@ -216,6 +216,13 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
       gameLog.add(campaign.id, 'dm', cleanedOpen, agentConfig.agentName, null, sessionId);
       await bot.sendMessage(`🎲 **${campaign.name}**\n\n${cleanedOpen}`);
 
+      // Generate opening scene image non-blocking
+      if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
+        generateImage(`${campaign.name} opening scene, ${campaignWithArc.scene?.slice(0, 80) || ''}`, 'scene')
+          .then(url => { if (url) bot.sendMessage(url, channelId); })
+          .catch(() => {});
+      }
+
       return;
     }
 
