@@ -31,6 +31,9 @@ function initRpgDatabase() {
       dm_user_id  TEXT,
       dm_username TEXT,
       scene       TEXT,
+      arc         TEXT,
+      current_act INTEGER DEFAULT 1,
+      current_beat TEXT,
       turn_timeout_minutes INTEGER DEFAULT 60,
       created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -128,6 +131,14 @@ const campaigns = {
 
   updateScene(campaignId, scene) {
     return db.prepare('UPDATE campaigns SET scene = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(scene, campaignId);
+  },
+
+  updateArc(campaignId, arc, currentAct, currentBeat) {
+    return db.prepare('UPDATE campaigns SET arc = ?, current_act = ?, current_beat = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(arc, currentAct, currentBeat, campaignId);
+  },
+
+  advanceAct(campaignId, act, beat) {
+    return db.prepare('UPDATE campaigns SET current_act = ?, current_beat = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(act, beat, campaignId);
   },
 
   setStatus(campaignId, status) {

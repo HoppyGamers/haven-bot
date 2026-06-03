@@ -381,8 +381,42 @@ ${party.length === 0 ? 'No investigators present.' : party.map(p =>
 };
 
 /**
- * Get a system definition by key.
+ * Generate a campaign arc prompt — asks Ollama to create a hidden story structure.
  */
+function buildArcPrompt(campaign, party) {
+  const system = getSystem(campaign.system);
+  const partyDesc = party.length === 0 ? 'a solo adventurer' :
+    party.map(p => `${p.name} the ${p.race} ${p.class}`).join(', ');
+
+  return `You are planning a ${system.name} campaign called "${campaign.name}" for ${partyDesc}.
+
+Create a 5-act campaign arc. This is a HIDDEN story outline the DM will use to guide players — players never see this.
+
+Respond ONLY with a JSON object in this exact format, no other text:
+{
+  "premise": "One sentence describing the core conflict",
+  "acts": [
+    {
+      "act": 1,
+      "title": "Short act title",
+      "summary": "What happens in this act (2-3 sentences)",
+      "key_beats": ["Beat 1", "Beat 2"],
+      "clues": ["Clue or discovery that moves players forward"],
+      "avoid": "What should NOT happen yet (save for later acts)"
+    },
+    { "act": 2, ... },
+    { "act": 3, ... },
+    { "act": 4, ... },
+    { "act": 5, "title": "Resolution", "summary": "...", "key_beats": [...], "clues": [], "avoid": "" }
+  ],
+  "villain": "Who or what is the main antagonist and their motivation",
+  "twist": "A surprising revelation for Act 3 or 4",
+  "ending": "How the campaign can conclude satisfyingly"
+}`;
+}
+
+/**
+ * Get a system definition by key. */
 function getSystem(key) {
   return SYSTEMS[key] || SYSTEMS.dnd5e;
 }
@@ -397,11 +431,41 @@ function listSystems() {
 }
 
 /**
- * Build the DM system prompt for a campaign.
+ * Build the DM system prompt for a campaign, injecting arc context if available.
  */
 function buildDmPrompt(campaign, party) {
   const system = getSystem(campaign.system);
-  return system.dmPrompt(campaign, party, campaign.scene);
+  let prompt = system.dmPrompt(campaign, party, campaign.scene);
+
+  // Inject hidden arc context if available
+  if (campaign.arc) {
+    try {
+      const arc = JSON.parse(campaign.arc);
+      const currentAct = arc.acts?.find(a => a.act === (campaign.current_act || 1));
+      const beat = campaign.current_beat || currentAct?.key_beats?.[0] || '';
+
+      prompt += `
+
+## Hidden Story Arc (NOT visible to players — use to guide the narrative)
+**Campaign premise:** ${arc.premise}
+**Current act:** Act ${campaign.current_act || 1} — ${currentAct?.title || ''}
+**Act summary:** ${currentAct?.summary || ''}
+**Current story beat:** ${beat}
+**Next clue to reveal:** ${currentAct?.clues?.[0] || 'None yet'}
+**What to AVOID revealing yet:** ${currentAct?.avoid || ''}
+**The villain:** ${arc.villain}
+**Upcoming twist (do not reveal yet):** ${arc.twist}
+
+## Pacing Rules
+- Not every search finds something — only reward searching when it serves the current story beat
+- Gently steer players toward the current beat without being obvious
+- If players wander off track, have an NPC, sound, or event redirect their attention
+- Build tension gradually — Act 1 should feel mysterious, Act 3 should feel dangerous
+- When players complete the current beat, naturally transition to the next one`;
+    } catch {}
+  }
+
+  return prompt;
 }
 
-module.exports = { getSystem, listSystems, buildDmPrompt, SYSTEMS };
+module.exports = { getSystem, listSystems, buildDmPrompt, buildArcPrompt, SYSTEMS };

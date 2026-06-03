@@ -6,7 +6,7 @@
 
 const { chat }         = require('../agent/ollama');
 const { roll, formatRoll, abilityMod, formatMod, rollCharacterStats } = require('./dice');
-const { buildDmPrompt, getSystem, listSystems } = require('./systems');
+const { buildDmPrompt, buildArcPrompt, getSystem, listSystems } = require('./systems');
 const { campaigns, characters, gameLog, combat, sessions, getDb } = require('./database');
 const { generateAscii, formatAscii, getPrebuilt } = require('./ascii');
 
@@ -180,15 +180,37 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
       campaigns.setStatus(campaign.id, 'active');
       const sessionId = sessions.start(campaign.id);
 
-      // Generate opening scene from DM
+      // Step 1: Generate hidden campaign arc
+      await bot.sendMessage(`_${agentConfig.agentName} is preparing the campaign..._`);
+      try {
+        const arcPrompt = buildArcPrompt(campaign, party);
+        const arcRaw = await chat({
+          ollamaUrl:    agentConfig.ollamaUrl,
+          model:        agentConfig.ollamaModel,
+          systemPrompt: 'You are a creative RPG game designer. Respond only with valid JSON, no other text, no markdown.',
+          messages:     [{ role: 'user', content: arcPrompt }],
+          timeoutMs:    120000,
+        });
+        const arcClean = arcRaw.replace(/```json|```/g, '').trim();
+        const arcObj = JSON.parse(arcClean);
+        const firstBeat = arcObj.acts?.[0]?.key_beats?.[0] || '';
+        campaigns.updateArc(campaign.id, JSON.stringify(arcObj), 1, firstBeat);
+        console.log(`[RPG] Arc generated for "${campaign.name}"`);
+      } catch (err) {
+        console.warn('[RPG] Arc generation failed, continuing without arc:', err.message);
+      }
+
+      // Step 2: Generate opening scene using arc context
       await bot.sendMessage(`_${agentConfig.agentName} is setting the scene..._`);
 
-      const systemPrompt = buildDmPrompt(campaign, party);
+      const campaignWithArc = campaigns.getByChannel(channelId);
+      const systemPrompt = buildDmPrompt(campaignWithArc, party);
       const response = await chat({
         ollamaUrl:    agentConfig.ollamaUrl,
         model:        agentConfig.ollamaModel,
         systemPrompt,
-        messages:     [{ role: 'user', content: 'Begin the campaign. Set the opening scene vividly. Welcome the players and describe where they are and what they perceive.' }],
+        messages:     [{ role: 'user', content: 'Begin the campaign. Set the opening scene for Act 1. Be atmospheric and introduce the initial hook naturally. Do not reveal the full plot.' }],
+        timeoutMs:    120000,
       });
 
       const cleanedOpen = cleanDmResponse(response);
@@ -197,7 +219,7 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
 
       // Generate opening scene ASCII art
       try {
-        const artSubject = campaign.scene?.slice(0, 80) || campaign.name;
+        const artSubject = campaignWithArc.scene?.slice(0, 80) || campaign.name;
         const art = await generateAscii(artSubject, agentConfig.ollamaUrl, agentConfig.ollamaModel, 'scene');
         if (art) await bot.sendMessage(formatAscii(art));
       } catch {}
@@ -312,6 +334,30 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
       );
     }
 
+    case 'arc': {
+      const campaign = campaigns.getByChannel(channelId);
+      if (!campaign) return bot.sendMessage(`❌ No campaign in this channel.`);
+      if (campaign.dm_user_id !== userId) return bot.sendMessage(`❌ Only the DM can view the arc.`);
+      if (!campaign.arc) return bot.sendMessage(`📖 No arc yet — start the campaign with \`${agentConfig.agentName} rpg start\``);
+      try {
+        const arc = JSON.parse(campaign.arc);
+        const actLines = arc.acts.map(a =>
+          `${a.act === campaign.current_act ? '▶️' : '   '} **Act ${a.act}: ${a.title}**\n    ${a.summary}`
+        ).join('\n');
+        return bot.sendMessage(
+          `📖 **${campaign.name} — Story Arc** *(DM Eyes Only)*\n\n` +
+          `**Premise:** ${arc.premise}\n` +
+          `**Villain:** ${arc.villain}\n` +
+          `**Twist:** ${arc.twist}\n\n` +
+          `**Acts:**\n${actLines}\n\n` +
+          `**Current beat:** ${campaign.current_beat || '—'}\n` +
+          `**Ending:** ${arc.ending}`
+        );
+      } catch {
+        return bot.sendMessage(`❌ Could not read arc data.`);
+      }
+    }
+
     case 'art': {
       const subject = parts.slice(1).join(' ').trim();
       if (!subject) return bot.sendMessage(`❌ **Usage:** \`${agentConfig.agentName} rpg art <subject>\`\nExample: \`${agentConfig.agentName} rpg art ancient dragon\``);
@@ -346,7 +392,9 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
         `\`${agentConfig.agentName} rpg inventory\` — your inventory\n` +
         `\`${agentConfig.agentName} rpg recap\` — AI summary of recent events\n\n` +
         `**DM Only:**\n` +
-        `\`${agentConfig.agentName} rpg pause / resume\` — freeze/unfreeze the game`
+        `\`${agentConfig.agentName} rpg pause / resume\` — freeze/unfreeze the game\n` +
+        `\`${agentConfig.agentName} rpg arc\` — view the hidden campaign story arc\n` +
+        `\`${agentConfig.agentName} rpg art <subject>\` — generate ASCII art`
       );
     }
 
