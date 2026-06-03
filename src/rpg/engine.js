@@ -219,9 +219,19 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
       // Generate opening scene image non-blocking
       if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
         const scenePrompt = cleanedOpen.split(/[.!?]/)[0].slice(0, 100).trim();
+        console.log(`[RPG Images] Generating opening scene: ${scenePrompt.slice(0, 50)}...`);
         generateImage(`${campaign.system} RPG scene, ${scenePrompt}`, 'scene')
-          .then(url => { if (url) bot.sendMessage(url, channelId); })
+          .then(url => {
+            if (url) {
+              console.log(`[RPG Images] Generated: ${url}`);
+              bot.sendMessage(url, channelId);
+            } else {
+              console.warn('[RPG Images] No URL returned');
+            }
+          })
           .catch(err => console.warn('[RPG Images] Opening scene failed:', err.message));
+      } else {
+        console.log(`[RPG Images] Skipped — COMFYUI_URL=${process.env.COMFYUI_URL} IMAGE_BASE_URL=${process.env.IMAGE_BASE_URL}`);
       }
 
       return;
@@ -490,6 +500,20 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
     campaigns.updateScene(campaign.id, cleaned.slice(0, 500));
 
     await bot.sendMessage(`⚔️ **${agentConfig.agentName}:** ${cleaned}`);
+
+    // Generate image for significant scene moments
+    if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
+      const { shouldGenerateImage } = require('./images');
+      const imgTrigger = shouldGenerateImage(cleaned, campaign.system);
+      if (imgTrigger) {
+        console.log(`[RPG Images] Generating action image: ${imgTrigger.prompt.slice(0, 50)}...`);
+        generateImage(imgTrigger.prompt, imgTrigger.style)
+          .then(url => {
+            if (url) { console.log(`[RPG Images] Generated: ${url}`); bot.sendMessage(url, channelId); }
+          })
+          .catch(err => console.warn('[RPG Images] Action image failed:', err.message));
+      }
+    }
 
   } catch (err) {
     if (thinkingMsg?.message_id) {
