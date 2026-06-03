@@ -598,6 +598,9 @@ if (AGENT_ENABLED) {
         const { parseMessage, handleCommand, handleAction, handleQuestion } = require('./rpg/engine');
         const agentConf = require('./agent/config').getChannelConfig(channel_id, agentDb);
         const parsed = parseMessage(content, agentConf.agentName, user_id);
+        if (parsed.type === 'command' || parsed.type === 'action' || parsed.type === 'roll' || parsed.type === 'question') {
+          recordResponse(channel_id); // prevent duplicate rapid-fire commands
+        }
         if (parsed.type === 'command') {
           return handleCommand(channelBot, channel_id, user_id, user, parsed.command, agentConf);
         }
