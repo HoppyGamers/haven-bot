@@ -398,6 +398,31 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
       );
     }
 
+    case 'delete': {
+      const campaign = campaigns.getByChannel(channelId);
+      if (!campaign) return bot.sendMessage(`❌ No campaign in this channel.`);
+      if (campaign.dm_user_id !== userId) return bot.sendMessage(`❌ Only the DM can delete the campaign.`);
+
+      const confirm = parts[1]?.toLowerCase();
+      if (confirm !== 'confirm') {
+        return bot.sendMessage(
+          `⚠️ **Delete Campaign: ${campaign.name}**\n\n` +
+          `This will permanently delete the campaign, all characters, and the entire game log.\n\n` +
+          `To confirm: \`${agentConfig.agentName} rpg delete confirm\``
+        );
+      }
+
+      // Delete all campaign data
+      const db = getDb();
+      db.prepare('DELETE FROM combat    WHERE campaign_id = ?').run(campaign.id);
+      db.prepare('DELETE FROM game_log  WHERE campaign_id = ?').run(campaign.id);
+      db.prepare('DELETE FROM sessions  WHERE campaign_id = ?').run(campaign.id);
+      db.prepare('DELETE FROM characters WHERE campaign_id = ?').run(campaign.id);
+      db.prepare('DELETE FROM campaigns WHERE id = ?').run(campaign.id);
+
+      return bot.sendMessage(`🗑️ Campaign **${campaign.name}** has been deleted.`);
+    }
+
     case '':
     case undefined:
       return bot.sendMessage(
