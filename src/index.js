@@ -325,9 +325,8 @@ bot.on('command', async (data) => {
           `🌐 **Dashboard Login Token**\n\n` +
           `Visit: \`http://your-server:${port}\`\n` +
           `Token: \`${token}\`\n\n` +
-          `⚠️ **Security Warning:** This token is visible to anyone in this channel. ` +
-          `Use it immediately then dismiss this message. ` +
-          `The token expires in 24 hours and is single-use.`
+          `_Only visible to you — expires in 24 hours._`,
+          { ephemeral: true, recipient_id: enrichedData.user_id }
         );
       } else {
         await channelBot.sendMessage(
@@ -482,7 +481,7 @@ bot.on('command', async (data) => {
 \`/addchannel <name> <code> <token>\` - Add a new channel without restart
 \`/removechannel <code>\` - Remove a DB-managed channel
 \`/channels\` - List all configured channels
-\`/dashboard token\` - Generate a web dashboard login token\n⚠️ Token is posted publicly in channel — use immediately and delete the message
+\`/dashboard token\` - Generate a web dashboard login token (sent privately to you only)
 
 **Fun:**
 \`/ping\` - Test the bot
@@ -698,20 +697,35 @@ async function main() {
     // Fun
     // Custom commands
     // RSS
-    { command: 'rss', description: 'Manage RSS news feeds' },
+    { command: 'rss', description: 'Manage RSS news feeds', subcommands: [
+      { name: 'list',    description: 'List all RSS feeds' },
+      { name: 'add',     description: 'Add a feed: /rss add <url> [channel]' },
+      { name: 'remove',  description: 'Remove a feed: /rss remove <id>' },
+      { name: 'check',   description: 'Manually check feeds for new items' },
+      { name: 'pause',   description: 'Pause a feed: /rss pause <id>' },
+      { name: 'resume',  description: 'Resume a feed: /rss resume <id>' },
+    ]},
     // Calendar
-    { command: 'calendar', description: 'View and manage events' },
-    { command: 'rsvp',     description: 'Toggle attendance for an event' },
+    { command: 'calendar', description: 'View and manage events', subcommands: [
+      { name: 'list',    description: 'Show upcoming events' },
+      { name: 'add',     description: 'Create an event: /calendar add <date> <time> <title>' },
+      { name: 'view',    description: 'View event details: /calendar view <id>' },
+      { name: 'edit',    description: 'Edit an event: /calendar edit <id> <field> <value>' },
+      { name: 'delete',  description: 'Delete an event: /calendar delete <id>' },
+    ]},
+    { command: 'rsvp',     description: 'Toggle attendance for an event: /rsvp <id>' },
     // Custom commands
     { command: 'customcommands', description: 'List all custom commands' },
-    { command: 'addcommand',   description: 'Create a custom command' },
-    { command: 'editcommand',  description: 'Edit a custom command' },
-    { command: 'removecommand',description: 'Delete a custom command' },
+    { command: 'addcommand',   description: 'Create a custom command: /addcommand <name> <response>' },
+    { command: 'editcommand',  description: 'Edit a custom command: /editcommand <name> <response>' },
+    { command: 'removecommand',description: 'Delete a custom command: /removecommand <name>' },
     // Channel management
-    { command: 'dashboard',     description: 'Web dashboard commands (admin)' },
-    { command: 'addchannel',    description: 'Add a new channel to the bot (admin)' },
-    { command: 'removechannel', description: 'Remove a channel from the bot (admin)' },
-    { command: 'channels',      description: 'List all configured channels (admin)' },
+    { command: 'dashboard',     description: 'Web dashboard commands (admin)', subcommands: [
+      { name: 'token', description: 'Generate a dashboard login token (posts publicly — use immediately)' },
+    ]},
+    { command: 'addchannel',    description: 'Add a new channel: /addchannel <name> <code> <token>' },
+    { command: 'removechannel', description: 'Remove a channel: /removechannel <code>' },
+    { command: 'channels',      description: 'List all configured channels' },
     // Fun
     { command: 'ping',       description: 'Test the bot' },
     { command: 'help',       description: 'Show all available commands' },
@@ -727,7 +741,7 @@ async function main() {
   // Build a hash of: command list + channel codes
   // If this matches what we registered last time, skip re-registration
   const channelCodes = allTokens.map(c => c.channelCode).sort().join(',');
-  const cmdSummary   = commandList.map(c => `${c.command}:${c.description}`).join('|');
+  const cmdSummary   = commandList.map(c => `${c.command}:${c.description}:${(c.subcommands||[]).map(s=>s.name).join(',')}`).join('|');
   const regHash      = crypto.createHash('md5').update(cmdSummary + channelCodes).digest('hex');
 
   const { db: botDb } = require('./database');
@@ -753,13 +767,14 @@ async function main() {
     for (const { token, channelName } of allTokens) {
       console.log(`   → ${channelName} (callback: ${channelManager.getCallbackUrl(token) || 'none'})`);
 
-      for (const { command, description } of commandList) {
+      for (const cmd of commandList) {
+        const { command, description } = cmd;
         if (requestCount > 0 && requestCount % RATE_LIMIT === 0) {
           console.log(`   ⏳ Rate limit pause — waiting ${DELAY_MS / 1000}s...`);
           await new Promise(r => setTimeout(r, DELAY_MS));
         }
         try {
-          await bot.registerCommand(command, description, token);
+          await bot.registerCommand(command, description, token, cmd.subcommands || null);
           requestCount++;
           await new Promise(r => setTimeout(r, CMD_GAP_MS));
         } catch (err) {

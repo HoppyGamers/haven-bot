@@ -182,7 +182,9 @@ class HavenBot extends EventEmitter {
 
     const body = { content };
     if (options.username)   body.username   = options.username;
-    if (options.avatar_url) body.avatar_url = options.avatar_url;
+    if (options.avatar_url)   body.avatar_url   = options.avatar_url;
+    if (options.ephemeral)    body.ephemeral    = true;
+    if (options.recipient_id) body.recipient_id = options.recipient_id;
 
     const res = await this._safeRequest('POST', `/api/webhooks/${token}/`, body);
     this._log('Message sent:', res);
@@ -218,15 +220,14 @@ class HavenBot extends EventEmitter {
   
   // --- Slash Command Methods ---
   
-  async registerCommand(command, description, token = null) {
+  async registerCommand(command, description, token = null, subcommands = null) {
     if (!command || !description) {
       throw new Error('Command name and description are required');
     }
     const useToken = token || this.token;
-    const res = await this._safeRequest('POST', `/api/webhooks/${useToken}/commands`, {
-      command,
-      description,
-    });
+    const body = { command, description };
+    if (subcommands && subcommands.length > 0) body.subcommands = subcommands;
+    const res = await this._safeRequest('POST', `/api/webhooks/${useToken}/commands`, body);
     this._log('Command registered:', command);
     this.commands[command] = description;
     return res;
