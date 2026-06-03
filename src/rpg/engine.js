@@ -218,9 +218,10 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
 
       // Generate opening scene image non-blocking
       if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
-        generateImage(`${campaign.name} opening scene, ${campaignWithArc.scene?.slice(0, 80) || ''}`, 'scene')
+        const scenePrompt = cleanedOpen.split(/[.!?]/)[0].slice(0, 100).trim();
+        generateImage(`${campaign.system} RPG scene, ${scenePrompt}`, 'scene')
           .then(url => { if (url) bot.sendMessage(url, channelId); })
-          .catch(() => {});
+          .catch(err => console.warn('[RPG Images] Opening scene failed:', err.message));
       }
 
       return;
@@ -618,8 +619,10 @@ function cleanDmResponse(text) {
     .join('\n')
     // Remove inline ACTION: fragments that appear mid-text
     .replace(/\s*ACTION:\s*.*/gi, '')
-    // Remove "Do you X?" meta prompts from the end
-    .replace(/\s*(Do you|Would you like to|What would you like to|What do you do)[^.!?]*[.!?]\s*$/gi, '')
+    // Remove meta prompts in English or other languages at the end
+    .replace(/\s*(Do you|Would you like to|What would you like to|What do you do|Please ask|请问|接下来|— 请|—请)[^\n]*$/gim, '')
+    // Remove lines starting with — (DM stage direction bullets)
+    .replace(/^\s*[—–-]\s*(Boorder|Player|Please|请|接)[^\n]*/gim, '')
     .trim();
 }
 
