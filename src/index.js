@@ -107,7 +107,7 @@ bot.on('command', async (data) => {
           } else if (USER_COMMANDS.has(command)) {
             secs = USER_DELETE_SECS;
           }
-          if (secs > 0 && msg && msg.message_id) {
+          if (secs > 0 && msg && msg.message_id && !options.ephemeral) {
             setTimeout(async () => {
               try { await target.deleteMessage(msg.message_id, enrichedData.channel_id); } catch {}
             }, secs * 1000);
@@ -721,7 +721,7 @@ async function main() {
     { command: 'removecommand',description: 'Delete a custom command: /removecommand <name>' },
     // Channel management
     { command: 'dashboard',     description: 'Web dashboard commands (admin)', subcommands: [
-      { name: 'token', description: 'Generate a dashboard login token (posts publicly — use immediately)' },
+      { name: 'token', description: 'Generate a dashboard login token (sent privately to you)' },
     ]},
     { command: 'addchannel',    description: 'Add a new channel: /addchannel <name> <code> <token>' },
     { command: 'removechannel', description: 'Remove a channel: /removechannel <code>' },

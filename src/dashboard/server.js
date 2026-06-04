@@ -220,6 +220,30 @@ async function getApiData(pathname, session, bot, channelManager) {
     }
   }
 
+  if (pathname === '/api/rpg/styles') {
+    try {
+      const rpgDb = require('../rpg/database');
+      if (!rpgDb.getDb()) return { styles: [] };
+      return { styles: rpgDb.artStyles.getAll() };
+    } catch (err) { return { styles: [], error: err.message }; }
+  }
+
+  if (pathname === '/api/rpg/settings') {
+    try {
+      const rpgDb = require('../rpg/database');
+      if (!rpgDb.getDb()) return { settings: [], error: 'RPG system not enabled' };
+      return { settings: rpgDb.rpgSettings.getAll() };
+    } catch (err) { return { settings: [], error: err.message }; }
+  }
+
+  if (pathname === '/api/rpg/triggers') {
+    try {
+      const rpgDb = require('../rpg/database');
+      if (!rpgDb.getDb()) return { triggers: [], error: 'RPG system not enabled — set RPG_ENABLED=true' };
+      return { triggers: rpgDb.imageTriggers.getAll() };
+    } catch (err) { return { triggers: [], error: err.message }; }
+  }
+
   if (pathname === '/api/settings') {
     const settingsKeys = [
       'BOT_NAME', 'TIMEZONE', 'HELP_DELETE_SECONDS',
@@ -431,6 +455,86 @@ async function handleWriteApi(pathname, method, payload, session, bot, channelMa
     return null;
   }
 
+  // ── RPG Art Styles ───────────────────────────────────────────────────────────
+
+  if (pathname === '/api/rpg/styles' && method === 'POST') {
+    const { key, label, prefix, negative } = payload;
+    if (!key || !label || !prefix) return { error: 'key, label and prefix are required' };
+    try {
+      const { artStyles } = require('../rpg/database');
+      const result = artStyles.add(key, label, prefix, negative || '');
+      return { ok: true, id: result.lastInsertRowid };
+    } catch (err) { return { error: err.message }; }
+  }
+
+  if (pathname.match(/^\/api\/rpg\/styles\/\d+$/) && method === 'POST') {
+    const id = parseInt(pathname.split('/').pop());
+    try {
+      const { artStyles } = require('../rpg/database');
+      artStyles.update(id, payload.key, payload.label, payload.prefix, payload.negative || '', payload.enabled !== false);
+      return { ok: true };
+    } catch (err) { return { error: err.message }; }
+  }
+
+  if (pathname.match(/^\/api\/rpg\/styles\/\d+$/) && method === 'DELETE') {
+    const id = parseInt(pathname.split('/').pop());
+    try {
+      const { artStyles } = require('../rpg/database');
+      artStyles.delete(id);
+      return { ok: true };
+    } catch (err) { return { error: err.message }; }
+  }
+
+  // ── RPG Settings ─────────────────────────────────────────────────────────────
+
+  if (pathname === '/api/rpg/settings' && method === 'POST') {
+    try {
+      const { rpgSettings } = require('../rpg/database');
+      const allowed = ['image_width','image_height','image_steps','image_cfg','image_cooldown','image_enabled','image_art_style'];
+      const updates = {};
+      for (const key of allowed) {
+        if (payload[key] !== undefined) updates[key] = payload[key];
+      }
+      if (Object.keys(updates).length === 0) return { error: 'No valid settings' };
+      rpgSettings.setMany(updates);
+      return { ok: true, message: `${Object.keys(updates).length} setting(s) updated` };
+    } catch (err) { return { error: err.message }; }
+  }
+
+  // ── RPG Image Triggers ───────────────────────────────────────────────────────
+
+  if (pathname === '/api/rpg/triggers' && method === 'POST') {
+    const { pattern, style, system, description } = payload;
+    if (!pattern) return { error: 'Pattern is required' };
+    try {
+      const { imageTriggers } = require('../rpg/database');
+      const result = imageTriggers.add(pattern, style || 'scene', system || 'all', description || '');
+      return { ok: true, id: result.lastInsertRowid };
+    } catch (err) { return { error: err.message }; }
+  }
+
+  if (pathname.match(/^\/api\/rpg\/triggers\/\d+$/) && method === 'POST') {
+    const id = parseInt(pathname.split('/').pop());
+    try {
+      const { imageTriggers } = require('../rpg/database');
+      if (payload.action === 'toggle') {
+        imageTriggers.toggle(id, payload.enabled);
+        return { ok: true };
+      }
+      imageTriggers.update(id, payload);
+      return { ok: true };
+    } catch (err) { return { error: err.message }; }
+  }
+
+  if (pathname.match(/^\/api\/rpg\/triggers\/\d+$/) && method === 'DELETE') {
+    const id = parseInt(pathname.split('/').pop());
+    try {
+      const { imageTriggers } = require('../rpg/database');
+      imageTriggers.delete(id);
+      return { ok: true };
+    } catch (err) { return { error: err.message }; }
+  }
+
   // ── Moderation ───────────────────────────────────────────────────────────────
 
   if (pathname.startsWith('/api/modlog/unban/') && method === 'POST') {
@@ -475,6 +579,15 @@ function serveStatic(res, filePath) {
 // ---------------------------------------------------------------------------
 
 function startDashboard(bot, channelManager) {
+  // Initialize RPG database if enabled so dashboard can access it
+  if ((process.env.RPG_ENABLED || 'false').toLowerCase() === 'true') {
+    try {
+      const { initRpgDatabase } = require('../rpg/database');
+      initRpgDatabase();
+    } catch (err) {
+      console.warn('[Dashboard] RPG database init failed:', err.message);
+    }
+  }
   if (!DASHBOARD_SECRET) {
     console.warn('⚠️  Dashboard disabled — DASHBOARD_SECRET not set in .env');
     console.warn('   Generate one with: openssl rand -base64 48');

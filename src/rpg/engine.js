@@ -8,7 +8,7 @@ const { chat }         = require('../agent/ollama');
 const { roll, formatRoll, abilityMod, formatMod, rollCharacterStats } = require('./dice');
 const { buildDmPrompt, buildArcPrompt, getSystem, listSystems } = require('./systems');
 const { campaigns, characters, gameLog, combat, sessions, getDb } = require('./database');
-const { generateImage, shouldGenerateImage } = require('./images');
+const { generateImage, shouldGenerateImage, shouldGenerateAppearanceImage } = require('./images');
 
 // ---------------------------------------------------------------------------
 // Message parsing
@@ -190,12 +190,48 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
           systemPrompt: 'You are a creative RPG game designer. Respond only with valid JSON, no other text, no markdown.',
           messages:     [{ role: 'user', content: arcPrompt }],
           timeoutMs:    120000,
+          numPredict:   4000,
         });
-        const arcClean = arcRaw.replace(/```json|```/g, '').trim();
-        const arcObj = JSON.parse(arcClean);
-        const firstBeat = arcObj.acts?.[0]?.key_beats?.[0] || '';
+        // Extract JSON object from response — model sometimes adds text before or after
+        let arcClean = arcRaw.replace(/```json|```/g, '').trim();
+        const jsonStart = arcClean.indexOf('{');
+        const jsonEnd   = arcClean.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+          arcClean = arcClean.slice(jsonStart, jsonEnd + 1);
+        }
+
+        // Attempt JSON parse — if truncated, try to repair by closing open structures
+        let arcObj;
+        try {
+          arcObj = JSON.parse(arcClean);
+        } catch (parseErr) {
+          console.log('[RPG] Parse error at:', parseErr.message);
+          // Try to repair truncated JSON by closing unclosed structures
+          let repaired = arcClean;
+          // Close any unclosed string
+          const quoteCount = (repaired.match(/(?<!\\)"/g) || []).length;
+          if (quoteCount % 2 !== 0) repaired += '"';
+          // Close unclosed arrays and objects
+          const opens  = (repaired.match(/[{[]/g) || []).length;
+          const closes = (repaired.match(/[}\]]/g) || []).length;
+          for (let i = 0; i < opens - closes; i++) repaired += i % 2 === 0 ? '}' : ']';
+          repaired += ']}'; // close acts array and root object
+          try { arcObj = JSON.parse(repaired); } catch { throw new Error('JSON repair failed'); }
+        }
+
+        // Normalize schema — accept both old (summary/key_beats) and new (beat/next) formats
+        if (arcObj.acts) {
+          arcObj.acts = arcObj.acts.map(a => ({
+            act:   a.act,
+            title: a.title || `Act ${a.act}`,
+            beat:  a.beat || a.summary || (a.key_beats?.[0]) || '',
+            next:  a.next || a.clues?.[0] || '',
+          }));
+        }
+
+        const firstBeat = arcObj.acts?.[0]?.beat || '';
         campaigns.updateArc(campaign.id, JSON.stringify(arcObj), 1, firstBeat);
-        console.log(`[RPG] Arc generated for "${campaign.name}"`);
+        console.log(`[RPG] Arc generated for "${campaign.name}" (${arcObj.acts?.length || 0} acts)`);
       } catch (err) {
         console.warn('[RPG] Arc generation failed, continuing without arc:', err.message);
       }
@@ -209,19 +245,21 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
         ollamaUrl:    agentConfig.ollamaUrl,
         model:        agentConfig.ollamaModel,
         systemPrompt,
-        messages:     [{ role: 'user', content: 'Begin the campaign. Set the opening scene for Act 1. Be atmospheric and introduce the initial hook naturally. Do not reveal the full plot.' }],
+        messages:     [{ role: 'user', content: 'Begin the campaign in English only. Set the opening scene for Act 1. Be atmospheric and introduce the initial hook. Keep it under 150 words. Use double line breaks between paragraphs.' }],
+        numPredict:   1200,
         timeoutMs:    120000,
       });
 
-      const cleanedOpen = cleanDmResponse(response);
+      const cleanedOpen = truncateDmResponse(cleanDmResponse(response), 200);
       gameLog.add(campaign.id, 'dm', cleanedOpen, agentConfig.agentName, null, sessionId);
       await bot.sendMessage(`🎲 **${campaign.name}**\n\n${cleanedOpen}`);
 
       // Generate opening scene image non-blocking
       if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
         const scenePrompt = cleanedOpen.split(/[.!?]/)[0].slice(0, 100).trim();
+        const campSeed    = Math.abs((campaign.id * 2654435761) ^ (campaign.name.split('').reduce((a,c) => a + c.charCodeAt(0), 0) * 1234567)) % 2147483647; // deterministic seed per campaign
         console.log(`[RPG Images] Generating opening scene: ${scenePrompt.slice(0, 50)}...`);
-        generateImage(`${campaign.system} RPG scene, ${scenePrompt}`, 'scene')
+        generateImage(`${campaign.system} RPG scene, ${scenePrompt}`, 'scene', campSeed)
           .then(url => {
             if (url) {
               console.log(`[RPG Images] Generated: ${url}`);
@@ -232,7 +270,8 @@ async function handleCommand(bot, channelId, userId, username, command, agentCon
           })
           .catch(err => console.warn('[RPG Images] Opening scene failed:', err.message));
       } else {
-        console.log(`[RPG Images] Skipped — COMFYUI_URL=${process.env.COMFYUI_URL} IMAGE_BASE_URL=${process.env.IMAGE_BASE_URL}`);
+        console.log(`[RPG Images] Skipped — COMFYUI_URL not set`);
+
       }
 
       return;
@@ -445,22 +484,23 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
   const char  = characters.getByCampaignAndUser(campaign.id, userId);
   const party = characters.getParty(campaign.id);
 
-  // Log the action
-  gameLog.add(campaign.id, 'action', actionText, username);
-
-  // Check if a roll is needed — ask Ollama with the roll baked in
-  // Determine appropriate roll based on action keywords
+  // Check if a roll is needed — roll once and use that result everywhere
   const rollResult = inferRollFromAction(actionText, char);
 
   let rollInfo = '';
+  let rolledTotal = null;
   if (rollResult) {
     const result = roll(rollResult.dice);
-    rollInfo = `\n\n🎲 **${rollResult.label}:** ${rollResult.dice} → ${result.breakdown}`;
+    rolledTotal  = result.total;
+    rollInfo     = `\n\n🎲 **${rollResult.label}:** ${rollResult.dice} → ${result.breakdown}`;
     await bot.sendMessage(`${username}: *${actionText}*${rollInfo}`);
     gameLog.add(campaign.id, 'roll', `${rollResult.label}: ${result.total}`, username, [result]);
   } else {
     await bot.sendMessage(`${username}: *${actionText}*`);
   }
+
+  // Log action now — after display but before history so it isn't double-sent to Ollama
+  gameLog.add(campaign.id, 'action', actionText, username);
 
   // Build context for DM
   const recent  = gameLog.getRecent(campaign.id, 15);
@@ -473,8 +513,9 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
       : cleanDmResponse(l.content),
   }));
 
-  const userMsg = rollResult
-    ? `[${username} ACTION]: ${actionText} [Roll result: ${roll(rollResult.dice).total}]`
+  // Inject roll result forcefully so Ollama never asks player to roll again
+  const userMsg = rolledTotal !== null
+    ? `[${username} ACTION]: ${actionText}\n[SYSTEM: The dice have already been rolled. ${rollResult.label} result = ${rolledTotal}. Use this exact number — do NOT ask the player to roll again.]`
     : `[${username} ACTION]: ${actionText}`;
 
   // Get DM response
@@ -486,7 +527,8 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
       ollamaUrl:    agentConfig.ollamaUrl,
       model:        agentConfig.ollamaModel,
       systemPrompt,
-      messages:     [...history.slice(-10), { role: 'user', content: userMsg }],
+      messages:     [...history.slice(-10), { role: 'user', content: userMsg + '\n[Respond in English only. Use double line breaks between paragraphs. Maximum 3 paragraphs.]' }],
+      numPredict:   1200,
       timeoutMs:    120000,
     });
 
@@ -494,7 +536,8 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
       try { await bot.deleteMessage(thinkingMsg.message_id); } catch {}
     }
 
-    const cleaned = cleanDmResponse(response);
+    const rawCleaned = cleanDmResponse(response);
+    const cleaned    = truncateDmResponse(rawCleaned, 180);
     gameLog.add(campaign.id, 'dm', cleaned, agentConfig.agentName);
 
     // Update scene in DB with last DM narration
@@ -502,16 +545,52 @@ async function handleAction(bot, channelId, userId, username, actionText, agentC
 
     await bot.sendMessage(`⚔️ **${agentConfig.agentName}:** ${cleaned}`);
 
-    // Generate image for significant scene moments
+    // Detect dead endings — only if response wasn't truncated (truncation means Ollama was heading somewhere)
+    if (rawCleaned.split(/\s+/).length <= 185 && isDeadEnding(cleaned)) {
+      try {
+        const interruptRaw = await chat({
+          ollamaUrl:    agentConfig.ollamaUrl,
+          model:        agentConfig.ollamaModel,
+          systemPrompt: buildDmPrompt(campaign, party),
+          messages:     [
+            { role: 'assistant', content: cleaned },
+            { role: 'user', content: '[SYSTEM: The scene needs a hook. Write exactly 1 sentence in English describing an unexpected interruption or event. Do NOT ask what the player does. Do NOT end with a question. Just describe what happens.]' }
+          ],
+          numPredict:   150,
+          timeoutMs:    60000,
+        });
+        const interrupt = cleanDmResponse(interruptRaw).trim();
+        if (interrupt && interrupt.length > 10) {
+          gameLog.add(campaign.id, 'dm', interrupt, agentConfig.agentName);
+          await bot.sendMessage(`⚔️ ${interrupt}`);
+        }
+      } catch {} // non-critical — don't fail the action if this errors
+    }
+
+    // Generate image for significant scene moments or appearance queries
     if (process.env.COMFYUI_URL && process.env.IMAGE_BASE_URL) {
-      const imgTrigger = shouldGenerateImage(cleaned, campaign.system);
-      if (imgTrigger) {
-        console.log(`[RPG Images] Generating action image: ${imgTrigger.prompt.slice(0, 50)}...`);
-        generateImage(imgTrigger.prompt, imgTrigger.style)
+      const campSeed = Math.abs((campaign.id * 2654435761) ^ (campaign.name.split('').reduce((a,c) => a + c.charCodeAt(0), 0) * 1234567)) % 2147483647;
+
+      // Check if player asked about appearance (triggers immediately, not from DM text)
+      const appearTrigger = shouldGenerateAppearanceImage(actionText, campaign.system);
+      if (appearTrigger) {
+        console.log(`[RPG Images] Generating appearance image: ${appearTrigger.prompt.slice(0, 50)}...`);
+        generateImage(appearTrigger.prompt, appearTrigger.style, campSeed)
           .then(url => {
             if (url) { console.log(`[RPG Images] Generated: ${url}`); bot.sendMessage(url, channelId); }
           })
-          .catch(err => console.warn('[RPG Images] Action image failed:', err.message));
+          .catch(err => console.warn('[RPG Images] Appearance image failed:', err.message));
+      } else {
+        // Check DM narration for scene/monster triggers
+        const imgTrigger = shouldGenerateImage(cleaned, campaign.system, channelId);
+        if (imgTrigger) {
+          console.log(`[RPG Images] Generating action image: ${imgTrigger.prompt.slice(0, 50)}...`);
+          generateImage(imgTrigger.prompt, imgTrigger.style, campSeed)
+            .then(url => {
+              if (url) { console.log(`[RPG Images] Generated: ${url}`); bot.sendMessage(url, channelId); }
+            })
+            .catch(err => console.warn('[RPG Images] Action image failed:', err.message));
+        }
       }
     }
 
@@ -548,7 +627,8 @@ async function handleQuestion(bot, channelId, userId, username, questionText, ag
       ollamaUrl:    agentConfig.ollamaUrl,
       model:        agentConfig.ollamaModel,
       systemPrompt,
-      messages:     [...history.slice(-8), { role: 'user', content: `[${username} OOC]: ${questionText}` }],
+      messages:     [...history.slice(-8), { role: 'user', content: `[OUT OF CHARACTER QUESTION — respond in English only, maximum 2 sentences, do NOT narrate any new events, do NOT advance the story, do NOT use the player's answer to continue the scene — just answer this question factually]: ${questionText}` }],
+      numPredict:   400,
       timeoutMs:    120000,
     });
 
@@ -556,7 +636,8 @@ async function handleQuestion(bot, channelId, userId, username, questionText, ag
       try { await bot.deleteMessage(thinkingMsg.message_id); } catch {}
     }
 
-    await bot.sendMessage(`🎲 **${agentConfig.agentName}:** ${cleanDmResponse(response)}`);
+    const answer = truncateDmResponse(cleanDmResponse(response), 80);
+    await bot.sendMessage(`🎲 **${agentConfig.agentName}:** ${answer}`);
 
   } catch (err) {
     if (thinkingMsg?.message_id) {
@@ -572,54 +653,146 @@ async function handleQuestion(bot, channelId, userId, username, questionText, ag
 
 /**
  * Infer what dice roll is needed based on action text and character.
- * Returns { dice, label } or null if no roll needed.
+ * Returns { dice, label, type } or null if no roll needed.
+ * type: 'attack' | 'defence' | 'skill' | 'initiative' | 'save'
  */
 function inferRollFromAction(actionText, char) {
   const text = actionText.toLowerCase();
 
-  // Attack actions
-  if (/attack|strike|slash|stab|shoot|fire|cast|hit/i.test(text)) {
-    const mod = char ? abilityMod(char.str) + 2 : 2; // +2 proficiency
-    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-    return { dice: `1d20${modStr}`, label: 'Attack Roll' };
+  const strMod  = char ? abilityMod(char.str)  : 0;
+  const dexMod  = char ? abilityMod(char.dex)  : 0;
+  const conMod  = char ? abilityMod(char.con)  : 0;
+  const intMod  = char ? abilityMod(char.int)  : 0;
+  const wisMod  = char ? abilityMod(char.wis)  : 0;
+  const chaMod  = char ? abilityMod(char.cha)  : 0;
+  const prof    = 2;
+  const fmt     = n => n >= 0 ? `+${n}` : `${n}`;
+
+  // Initiative
+  if (/\binitiative\b|roll.*init/i.test(text)) {
+    return { dice: `1d20${fmt(dexMod)}`, label: 'Initiative', type: 'initiative' };
+  }
+
+  // Defence / Parry / Block — must come before attack to avoid misclassification
+  if (/\bdefend\b|\bparry\b|\bblock\b|\bshield\b.*block|\bevade\b|\bdive.*away\b|\broll.*away\b/i.test(text)) {
+    return { dice: `1d20${fmt(dexMod)}`, label: 'Defence Roll', type: 'defence' };
+  }
+
+  // Ranged attack
+  if (/shoot|fire.*arrow|fire.*bolt|throw.*javelin|throw.*dagger|loose.*arrow|fire.*crossbow/i.test(text)) {
+    return { dice: `1d20${fmt(dexMod + prof)}`, label: 'Ranged Attack', type: 'attack' };
+  }
+
+  // Hacking / tech bypass
+  if (/\bbypass\b|\bhack\b|\bcrack\b|\bpick.*lock|\bpicklock\b|\bdisable.*security|\boverride\b|\bsplice\b|\bnetrun\b/i.test(text)) {
+    return { dice: `1d20${fmt(intMod + prof)}`, label: 'Hacking Check', type: 'skill' };
+  }
+
+  // Spell attack
+  if (/\bcast\b|\bspell\b|fireball|lightning bolt|magic missile|\bchannel\b|eldritch blast/i.test(text)) {
+    return { dice: `1d20${fmt(intMod + prof)}`, label: 'Spell Attack', type: 'attack' };
+  }
+
+  // Melee attack
+  if (/\battack\b|\bstrike\b|\bslash\b|\bstab\b|\bswing\b|\bhit\b|\blunge\b|\bthrust\b|\bcut\b|\bchop\b|\bsmash\b|\bpunch\b|\bkick\b/i.test(text)) {
+    return { dice: `1d20${fmt(strMod + prof)}`, label: 'Attack Roll', type: 'attack' };
   }
 
   // Stealth
-  if (/sneak|hide|stealth|creep/i.test(text)) {
-    const mod = char ? abilityMod(char.dex) : 0;
-    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-    return { dice: `1d20${modStr}`, label: 'Stealth Check' };
+  if (/\bsneak\b|\bhide\b|\bstealth\b|\bcreep\b|\bconceal\b|\bshadow\b/i.test(text)) {
+    return { dice: `1d20${fmt(dexMod)}`, label: 'Stealth Check', type: 'skill' };
   }
 
-  // Persuasion/Deception
-  if (/persuade|convince|lie|deceive|bluff|intimidate/i.test(text)) {
-    const mod = char ? abilityMod(char.cha) : 0;
-    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-    return { dice: `1d20${modStr}`, label: 'Charisma Check' };
+  // Persuasion
+  if (/\bpersuade\b|\bnegotiate\b|\bconvince\b|\bcharm\b|\bflatter\b|\bappeal\b/i.test(text)) {
+    return { dice: `1d20${fmt(chaMod)}`, label: 'Persuasion Check', type: 'skill' };
   }
 
-  // Perception/Investigation — only when actively searching or investigating
-  if (/search|examine|investigate|listen carefully|spot|look for|look around|scout/i.test(text)) {
-    const mod = char ? abilityMod(char.wis) : 0;
-    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-    return { dice: `1d20${modStr}`, label: 'Perception Check' };
+  // Deception
+  if (/\blie\b|\bdeceive\b|\bbluff\b|\btrick\b|\bpretend\b|\bdisguise\b/i.test(text)) {
+    return { dice: `1d20${fmt(chaMod)}`, label: 'Deception Check', type: 'skill' };
   }
 
-  // Athletics — only clearly challenging physical feats, not casual actions
-  if (/climb|jump|swim|sprint|force open|lift|break down|scale|vault/i.test(text)) {
-    const mod = char ? abilityMod(char.str) : 0;
-    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-    return { dice: `1d20${modStr}`, label: 'Athletics Check' };
+  // Intimidation
+  if (/\bintimidate\b|\bthreaten\b|\bmenace\b|\bscare\b|\bterrorize\b/i.test(text)) {
+    return { dice: `1d20${fmt(chaMod)}`, label: 'Intimidation Check', type: 'skill' };
+  }
+
+  // Perception / Investigation
+  if (/\bsearch\b|\bexamine\b|\binvestigate\b|\blisten\b|\bspot\b|\blook for\b|\bscout\b|\bdetect\b|\bsense\b|\bstudy\b/i.test(text)) {
+    return { dice: `1d20${fmt(wisMod)}`, label: 'Perception Check', type: 'skill' };
+  }
+
+  // Athletics
+  if (/\bclimb\b|\bjump\b|\bswim\b|\bsprint\b|force open|break down|\bscale\b|\bvault\b|\bgrapple\b|\bwrestle\b|\bshove\b/i.test(text)) {
+    return { dice: `1d20${fmt(strMod)}`, label: 'Athletics Check', type: 'skill' };
   }
 
   // Acrobatics
-  if (/dodge|tumble|flip|balance|acrobat/i.test(text)) {
-    const mod = char ? abilityMod(char.dex) : 0;
-    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
-    return { dice: `1d20${modStr}`, label: 'Acrobatics Check' };
+  if (/\btumble\b|\bflip\b|\bbalance\b|\bsomersault\b|roll.*clear/i.test(text)) {
+    return { dice: `1d20${fmt(dexMod)}`, label: 'Acrobatics Check', type: 'skill' };
+  }
+
+  // Constitution save
+  if (/\bresist\b|\bendure\b|saving throw|constitution check|hold.*breath/i.test(text)) {
+    return { dice: `1d20${fmt(conMod)}`, label: 'Constitution Save', type: 'save' };
   }
 
   return null; // No roll needed
+}
+
+/**
+ * Hard truncate DM response to max word count at a sentence boundary.
+ * Prevents Ollama from narrating the entire scene when it ignores length instructions.
+ */
+function truncateDmResponse(text, maxWords = 180) {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxWords) return text.trim();
+
+  // Find the last sentence boundary within the word limit
+  const truncated = words.slice(0, maxWords).join(' ');
+  const lastSentence = truncated.search(/[.!?][^.!?]*$/);
+
+  if (lastSentence > 50) {
+    // Cut at last complete sentence
+    return truncated.slice(0, lastSentence + 1).trim();
+  }
+
+  // No sentence boundary found — cut at word limit with ellipsis
+  return truncated + '...';
+}
+
+/**
+ * Detect if a DM response ends without a hook — no tension, no decision point.
+ * Returns true if the scene needs an interrupt injected.
+ */
+function isDeadEnding(text) {
+  const last = text.trim().split(/[.!?]/).filter(s => s.trim().length > 0).slice(-2).join(' ').toLowerCase();
+
+  // Dead ending patterns — scene is closed with no hook
+  const deadPatterns = [
+    /ready (for|to) (whatever|the|your|what)/,
+    /drift(s|ed)? (off |into )?to? sleep/,
+    /settle(s|d)? (in|down|into)/,
+    /wait(s|ing)? (to see|for|patiently)/,
+    /prepare(s|d)? (yourself|themselves|for)/,
+    /rest(s|ed|ing)? (for|until|through)/,
+    /close(s|d)? (your|their|his|her) eyes/,
+    /fade(s|d)? (to|into) (black|sleep|rest)/,
+    /morning (comes|will come|arrives)/,
+    /journey (ahead|continues|awaits)/,
+    /whatever (comes|happens) next/,
+    /lull(s|ed)? (you|them) to sleep/,
+    /end(s|ed)? (the|your) (day|night|session)/,
+    /time (will|to) tell/,
+    // Question endings — DM asking player what to do instead of creating tension
+    /what (do|does|will|should|would) (you|brock|the party) (do|choose|decide|want)/i,
+    /which (path|way|door|option|choice) (do|will|should) (you|he|she|they)/i,
+    /what (is|are) (your|brock.s) next (move|step|action)/i,
+    /do you (want|wish|choose|decide)/i,
+  ];
+
+  return deadPatterns.some(p => p.test(last));
 }
 
 /**
@@ -645,6 +818,8 @@ function cleanDmResponse(text) {
     .replace(/\s*ACTION:\s*.*/gi, '')
     // Remove meta prompts in English or other languages at the end
     .replace(/\s*(Do you|Would you like to|What would you like to|What do you do|Please ask|请问|接下来|— 请|—请)[^\n]*$/gim, '')
+    // Strip [SYSTEM:...] tags that leak into DM narration
+    .replace(/\[SYSTEM:[^\]]*\]/g, '')
     // Remove lines starting with — (DM stage direction bullets)
     .replace(/^\s*[—–-]\s*(Boorder|Player|Please|请|接)[^\n]*/gim, '')
     .trim();

@@ -52,7 +52,7 @@ async function ollamaRequest(ollamaUrl, body, timeoutMs = 60000) {
 /**
  * Plain chat — no tools. Returns response text.
  */
-async function chat({ ollamaUrl, model, systemPrompt, messages, timeoutMs = 60000 }) {
+async function chat({ ollamaUrl, model, systemPrompt, messages, timeoutMs = 60000, numPredict = 600 }) {
   const result = await ollamaRequest(ollamaUrl, {
     model,
     stream: false,

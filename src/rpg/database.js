@@ -94,6 +94,109 @@ function initRpgDatabase() {
     )
   `);
 
+  // ── Image triggers ───────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_image_triggers (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      pattern     TEXT NOT NULL,
+      style       TEXT NOT NULL DEFAULT 'scene',
+      system      TEXT NOT NULL DEFAULT 'all',
+      description TEXT,
+      enabled     BOOLEAN DEFAULT 1,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Pre-populate default triggers if table is empty
+  const triggerCount = db.prepare('SELECT COUNT(*) as c FROM rpg_image_triggers').get();
+  if (triggerCount.c === 0) {
+    const defaults = [
+      // Scene transitions
+      { pattern: 'you enter|you step into|you arrive|you find yourself', style: 'scene', system: 'all', description: 'Entering a new location' },
+      { pattern: 'before you (stands?|lies?|looms?)|stretches? (before|ahead)', style: 'scene', system: 'all', description: 'Scene reveal' },
+      { pattern: 'you (reach|approach|emerge)', style: 'scene', system: 'all', description: 'Arriving somewhere' },
+      { pattern: 'comes? into view|opens? up (before|ahead)', style: 'scene', system: 'all', description: 'Location revealed' },
+      // Environmental
+      { pattern: '(narrow|ancient|crumbling|shadowy|dark|dense|misty|vast)\s+(bridge|stream|path|corridor|room|chamber|clearing|village|tower|gate|cave|ruins)', style: 'scene', system: 'all', description: 'Significant environment detail' },
+      { pattern: '(tavern|inn|castle|dungeon|forest|temple|cave|ruins|market|harbor)', style: 'scene', system: 'dnd5e', description: 'D&D location types' },
+      { pattern: '(cantina|starport|hangar|bridge|cockpit|planet surface|space station)', style: 'scene', system: 'starwars', description: 'Star Wars locations' },
+      { pattern: '(neon|alley|corporate tower|nightclub|slums|rooftop|server room)', style: 'scene', system: 'cyberpunk', description: 'Cyberpunk locations' },
+      { pattern: '(space station|ship corridor|colony|asteroid|alien world)', style: 'scene', system: 'scifi', description: 'Sci-Fi locations' },
+      { pattern: '(mansion|asylum|graveyard|basement|attic|ritual chamber)', style: 'scene', system: 'horror', description: 'Horror locations' },
+      // Monster/enemy
+      { pattern: 'emerges?|bursts? (from|through)|lunges?|charges?|snarls?|roars?', style: 'monster', system: 'all', description: 'Enemy appears aggressively' },
+      { pattern: 'reveals? (itself|themselves)|steps? (out|forward) (from|into)', style: 'monster', system: 'all', description: 'Enemy reveals itself' },
+      { pattern: '(goblin|orc|dragon|troll|undead|skeleton|wolf|spider|demon) (attacks?|appears?|emerges?)', style: 'monster', system: 'dnd5e', description: 'D&D monster encounter' },
+      { pattern: '(stormtrooper|sith|bounty hunter|droid|wampa|rancor)', style: 'monster', system: 'starwars', description: 'Star Wars enemy' },
+      { pattern: '(gang member|corpo agent|cyborg|netrunner|MaxTac)', style: 'monster', system: 'cyberpunk', description: 'Cyberpunk enemy' },
+      // Combat
+      { pattern: 'initiative|combat begins|battle starts|roll for attack', style: 'scene', system: 'all', description: 'Combat starts' },
+      // NPC introduction
+      { pattern: 'introduces? (herself|himself|themselves)|you (notice|spot|see) (a|an) (figure|person|woman|man)', style: 'scene', system: 'all', description: 'NPC appears' },
+    ];
+    const stmt = db.prepare('INSERT INTO rpg_image_triggers (pattern, style, system, description) VALUES (?, ?, ?, ?)');
+    for (const t of defaults) {
+      stmt.run(t.pattern, t.style, t.system, t.description);
+    }
+    console.log(`🎲 RPG image triggers: ${defaults.length} defaults loaded`);
+  }
+
+  // ── RPG Art Styles ───────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_art_styles (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      key         TEXT UNIQUE NOT NULL,
+      label       TEXT NOT NULL,
+      prefix      TEXT NOT NULL,
+      negative    TEXT NOT NULL DEFAULT '',
+      enabled     BOOLEAN DEFAULT 1,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  const styleCount = db.prepare('SELECT COUNT(*) as c FROM rpg_art_styles').get();
+  if (styleCount.c === 0) {
+    const defaults = [
+      { key: 'anime',      label: 'Anime',               prefix: 'anime style, Studio Ghibli, cel shaded, 2D animation,',          negative: 'realistic, photorealistic, 3d render' },
+      { key: 'comic',      label: 'Comic Book',           prefix: 'comic book art, bold ink outlines, Marvel style, flat cel shading,', negative: 'photorealistic, blurry outlines' },
+      { key: 'cartoon',    label: 'Cartoon / Pixar',      prefix: 'cartoon style, Pixar 3D animation, vibrant colors, stylized,',    negative: 'realistic, dark, gritty' },
+      { key: 'oil',        label: 'Oil Painting',         prefix: 'oil painting, classical art, Renaissance style, detailed brushwork,', negative: 'digital art, anime' },
+      { key: 'grimdark',   label: 'Dark Fantasy',         prefix: 'dark fantasy art, grimdark, gothic horror, desaturated,',         negative: 'bright colors, cheerful' },
+      { key: 'watercolor', label: 'Watercolor',           prefix: 'watercolor illustration, soft washes, painterly, wet media,',     negative: 'digital art, sharp edges' },
+      { key: 'pixel',      label: 'Pixel Art (16-bit)',   prefix: 'pixel art, 16-bit SNES RPG style, retro game sprite,',            negative: 'realistic, photorealistic, blurry' },
+    ];
+    const stmt = db.prepare('INSERT INTO rpg_art_styles (key, label, prefix, negative) VALUES (?, ?, ?, ?)');
+    for (const s of defaults) stmt.run(s.key, s.label, s.prefix, s.negative);
+    console.log('🎲 RPG art styles: defaults loaded');
+  }
+
+  // ── RPG Settings ─────────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rpg_settings (
+      key         TEXT PRIMARY KEY,
+      value       TEXT NOT NULL,
+      description TEXT,
+      updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Pre-populate defaults if empty
+  const settingCount = db.prepare('SELECT COUNT(*) as c FROM rpg_settings').get();
+  if (settingCount.c === 0) {
+    const defaults = [
+      { key: 'image_width',    value: '832',  description: 'Generated image width in pixels' },
+      { key: 'image_height',   value: '512',  description: 'Generated image height in pixels' },
+      { key: 'image_steps',    value: '4',    description: 'Diffusion steps (fewer = faster, less detail)' },
+      { key: 'image_cfg',      value: '2.0',  description: 'Guidance scale (higher = more prompt adherence)' },
+      { key: 'image_cooldown', value: '45',   description: 'Seconds between scene images per channel' },
+      { key: 'image_enabled',  value: 'true', description: 'Enable/disable image generation globally' },
+      { key: 'image_art_style', value: '',     description: 'Art style suffix added to all prompts (e.g. anime style, comic book art, oil painting)' },
+    ];
+    const stmt = db.prepare('INSERT INTO rpg_settings (key, value, description) VALUES (?, ?, ?)');
+    for (const s of defaults) stmt.run(s.key, s.value, s.description);
+    console.log('🎲 RPG settings: defaults loaded');
+  }
+
   // ── Combat encounters ──────────────────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS combat (
@@ -263,6 +366,95 @@ const combat = {
 };
 
 // ---------------------------------------------------------------------------
+// Art Style operations
+// ---------------------------------------------------------------------------
+const artStyles = {
+  getAll() {
+    return db.prepare('SELECT * FROM rpg_art_styles ORDER BY id').all();
+  },
+  getEnabled() {
+    return db.prepare('SELECT * FROM rpg_art_styles WHERE enabled = 1 ORDER BY id').all();
+  },
+  add(key, label, prefix, negative) {
+    return db.prepare('INSERT INTO rpg_art_styles (key, label, prefix, negative) VALUES (?, ?, ?, ?)').run(key, label, prefix, negative);
+  },
+  update(id, key, label, prefix, negative, enabled) {
+    return db.prepare('UPDATE rpg_art_styles SET key=?, label=?, prefix=?, negative=?, enabled=? WHERE id=?').run(key, label, prefix, negative, enabled ? 1 : 0, id);
+  },
+  delete(id) {
+    return db.prepare('DELETE FROM rpg_art_styles WHERE id=?').run(id);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// RPG Settings operations
+// ---------------------------------------------------------------------------
+const rpgSettings = {
+  getAll() {
+    return db.prepare('SELECT * FROM rpg_settings ORDER BY key').all();
+  },
+  get(key) {
+    const row = db.prepare('SELECT value FROM rpg_settings WHERE key = ?').get(key);
+    return row ? row.value : null;
+  },
+  getInt(key, fallback = 0) {
+    const val = this.get(key);
+    return val !== null ? parseInt(val) : fallback;
+  },
+  getFloat(key, fallback = 0) {
+    const val = this.get(key);
+    return val !== null ? parseFloat(val) : fallback;
+  },
+  getBool(key, fallback = true) {
+    const val = this.get(key);
+    return val !== null ? val === 'true' : fallback;
+  },
+  set(key, value) {
+    return db.prepare(
+      'INSERT OR REPLACE INTO rpg_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
+    ).run(key, String(value));
+  },
+  setMany(updates) {
+    const stmt = db.prepare(
+      'INSERT OR REPLACE INTO rpg_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
+    );
+    for (const [key, value] of Object.entries(updates)) {
+      stmt.run(key, String(value));
+    }
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Image trigger operations
+// ---------------------------------------------------------------------------
+const imageTriggers = {
+  getAll() {
+    return db.prepare('SELECT * FROM rpg_image_triggers ORDER BY system, style, id').all();
+  },
+  getEnabled(system) {
+    return db.prepare(
+      'SELECT * FROM rpg_image_triggers WHERE enabled = 1 AND (system = ? OR system = ?)'
+    ).all(system, 'all');
+  },
+  add(pattern, style, system, description) {
+    return db.prepare(
+      'INSERT INTO rpg_image_triggers (pattern, style, system, description) VALUES (?, ?, ?, ?)'
+    ).run(pattern, style, system, description);
+  },
+  update(id, data) {
+    return db.prepare(
+      'UPDATE rpg_image_triggers SET pattern = ?, style = ?, system = ?, description = ?, enabled = ? WHERE id = ?'
+    ).run(data.pattern, data.style, data.system, data.description, data.enabled ? 1 : 0, id);
+  },
+  toggle(id, enabled) {
+    return db.prepare('UPDATE rpg_image_triggers SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+  },
+  delete(id) {
+    return db.prepare('DELETE FROM rpg_image_triggers WHERE id = ?').run(id);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Session operations
 // ---------------------------------------------------------------------------
 const sessions = {
@@ -280,4 +472,4 @@ const sessions = {
   },
 };
 
-module.exports = { initRpgDatabase, getDb, campaigns, characters, gameLog, combat, sessions };
+module.exports = { initRpgDatabase, getDb, campaigns, characters, gameLog, combat, sessions, imageTriggers, rpgSettings, artStyles };

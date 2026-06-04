@@ -123,6 +123,9 @@
     <div class="nav-section">Config</div>
     <div class="nav-item" onclick="navigate('settings')"><span class="icon">⚙️</span> Settings</div>
 
+    <div class="nav-section">RPG</div>
+    <div class="nav-item" onclick="navigate('rpgtriggers')"><span class="icon">🎨</span> Image Triggers</div>
+
     <div class="nav-section">AI Agent</div>
     <div class="nav-item agent-only" onclick="navigate('agent')" style="display:none"><span class="icon">🧠</span> Agent Stats</div>
   </div>
@@ -140,11 +143,13 @@
   <div id="page-modlog" class="page"><div class="page-header"><h1>Moderation Log</h1><p>Recent moderation actions</p></div><div id="modlog-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
   <div id="page-settings" class="page"><div class="page-header"><h1>Settings</h1><p>Runtime configuration — changes apply immediately without restart</p></div><div id="settings-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
 
+  <div id="page-rpgtriggers" class="page"><div id="rpgtriggers-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
+
   <div id="page-agent" class="page"><div class="page-header"><h1>AI Agent Stats</h1><p>Conversations, memory, and tool usage</p></div><div id="agent-content"><div class="loading"><div class="spinner"></div>Loading...</div></div></div>
 </main>
 
 <script>
-const pages = ['overview','channels','users','calendar','rss','modlog','settings','agent'];
+const pages = ['overview','channels','users','calendar','rss','modlog','settings','rpgtriggers','agent'];
 let currentPage = 'overview';
 const loaded = new Set();
 let uptimeBase = 0;
@@ -182,7 +187,7 @@ function num(n){return (n||0).toLocaleString();}
 
 async function loadPage(page) {
   const endpointMap = {
-    overview:'status', channels:'channels', settings:'settings',
+    overview:'status', channels:'channels', settings:'settings', rpgtriggers:'rpg/triggers',
     users:'users', calendar:'calendar', rss:'rss',
     modlog:'modlog', agent:'agent'
   };
@@ -190,7 +195,7 @@ async function loadPage(page) {
   if (!data) return;
   const el = document.getElementById(`${page}-content`);
   const renderers = {
-    overview:renderOverview, channels:renderChannels, settings:renderSettings,
+    overview:renderOverview, channels:renderChannels, settings:renderSettings, rpgtriggers:(el,d)=>{renderRpgTriggers(el,d);loadRpgSettings();},
     users:renderUsers, calendar:renderCalendar, rss:renderRSS,
     modlog:renderModlog, agent:renderAgent
   };
@@ -732,6 +737,280 @@ async function unbanUser(userId) {
     await apiWrite(`/api/modlog/unban/${userId}`, 'POST', {});
     toast(`✓ User ${userId} unbanned`);
     loaded.delete('modlog'); loadPage('modlog');
+  } catch(e) { toast(e.message, 'error'); }
+}
+</script>
+
+
+<script>
+// ── RPG Image Triggers ────────────────────────────────────────────────────────
+const TRIGGER_STYLES  = ['scene','monster','portrait','item'];
+const TRIGGER_SYSTEMS = ['all','dnd5e','starwars','cyberpunk','scifi','horror'];
+
+function renderRpgTriggers(el, d) {
+  if (d.error && (!d.triggers || d.triggers.length === 0)) {
+    el.innerHTML = `<div class="card"><div class="empty">⚠️ ${d.error}</div></div>`;
+    return;
+  }
+  const triggers = d.triggers || [];
+  const bySystem = {};
+  for (const sys of TRIGGER_SYSTEMS) bySystem[sys] = triggers.filter(t => t.system === sys);
+
+  let html = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div><h1 style="font-size:22px;font-weight:700">Image Triggers</h1>
+      <p style="color:var(--muted);font-size:14px;margin-top:4px">Patterns that trigger Stable Diffusion image generation during RPG sessions</p></div>
+      <button class="btn btn-primary" onclick="showAddTrigger()">+ Add Trigger</button>
+    </div>`;
+
+  for (const sys of TRIGGER_SYSTEMS) {
+    const list = bySystem[sys];
+    if (!list.length) continue;
+    html += `<div class="card" style="margin-bottom:12px">
+      <div class="card-title">${sys === 'all' ? '🌐 All Systems' : '⚔️ ' + sys}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Pattern</th><th>Style</th><th>Description</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${list.map(t => `<tr>
+          <td class="mono" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis">${t.pattern}</td>
+          <td>${badge(t.style, t.style==='monster'?'red':t.style==='scene'?'blue':'gray')}</td>
+          <td style="color:var(--muted);font-size:12px">${t.description||'—'}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="toggleTrigger(${t.id},${t.enabled})">${t.enabled?'✅ On':'⭕ Off'}</button></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="showEditTrigger(${t.id},'${t.pattern.replace(/'/g,"\\'")}','${t.style}','${t.system}','${(t.description||'').replace(/'/g,"\\'")}')">Edit</button>
+            <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteTrigger(${t.id})">Delete</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function showAddTrigger() {
+  const sysOpts = TRIGGER_SYSTEMS.map(s => `<option value="${s}">${s}</option>`).join('');
+  const styleOpts = TRIGGER_STYLES.map(s => `<option value="${s}">${s}</option>`).join('');
+  openModal('Add Image Trigger', `
+    <div class="form-field"><label>Pattern (regex)</label><input id="tr-pattern" placeholder="you enter|you arrive|before you" /></div>
+    <div class="form-field"><label>Style</label><select id="tr-style">${styleOpts}</select></div>
+    <div class="form-field"><label>System</label><select id="tr-system">${sysOpts}</select></div>
+    <div class="form-field"><label>Description</label><input id="tr-desc" placeholder="Brief description of what this triggers on" /></div>
+  `, `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="submitAddTrigger()">Add Trigger</button>
+  `);
+}
+
+async function submitAddTrigger() {
+  const pattern = document.getElementById('tr-pattern').value.trim();
+  const style   = document.getElementById('tr-style').value;
+  const system  = document.getElementById('tr-system').value;
+  const desc    = document.getElementById('tr-desc').value.trim();
+  if (!pattern) { toast('Pattern is required', 'error'); return; }
+  try {
+    await apiWrite('/api/rpg/triggers', 'POST', { pattern, style, system, description: desc });
+    closeModal();
+    toast('✓ Trigger added');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function showEditTrigger(id, pattern, style, system, desc) {
+  const sysOpts  = TRIGGER_SYSTEMS.map(s => `<option value="${s}"${s===system?' selected':''}>${s}</option>`).join('');
+  const styleOpts = TRIGGER_STYLES.map(s => `<option value="${s}"${s===style?' selected':''}>${s}</option>`).join('');
+  openModal('Edit Trigger', `
+    <div class="form-field"><label>Pattern (regex)</label><input id="etr-pattern" value="${pattern}" /></div>
+    <div class="form-field"><label>Style</label><select id="etr-style">${styleOpts}</select></div>
+    <div class="form-field"><label>System</label><select id="etr-system">${sysOpts}</select></div>
+    <div class="form-field"><label>Description</label><input id="etr-desc" value="${desc}" /></div>
+  `, `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="submitEditTrigger(${id})">Save</button>
+  `);
+}
+
+async function submitEditTrigger(id) {
+  const pattern = document.getElementById('etr-pattern').value.trim();
+  const style   = document.getElementById('etr-style').value;
+  const system  = document.getElementById('etr-system').value;
+  const desc    = document.getElementById('etr-desc').value.trim();
+  if (!pattern) { toast('Pattern is required', 'error'); return; }
+  try {
+    await apiWrite(`/api/rpg/triggers/${id}`, 'POST', { pattern, style, system, description: desc, enabled: 1 });
+    closeModal();
+    toast('✓ Trigger updated');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleTrigger(id, current) {
+  try {
+    await apiWrite(`/api/rpg/triggers/${id}`, 'POST', { action: 'toggle', enabled: !current });
+    toast(current ? '⭕ Trigger disabled' : '✅ Trigger enabled');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteTrigger(id) {
+  if (!confirm('Delete this trigger?')) return;
+  try {
+    await apiWrite(`/api/rpg/triggers/${id}`, 'DELETE', {});
+    toast('✓ Trigger deleted');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── RPG Settings ─────────────────────────────────────────────────────────────
+async function loadRpgSettings() {
+  const [settData, styleData] = await Promise.all([
+    api('/api/rpg/settings'),
+    api('/api/rpg/styles'),
+  ]);
+  if (!settData) return;
+  const s = {};
+  for (const row of settData.settings || []) s[row.key] = row.value;
+  const styles = styleData?.styles || [];
+
+  const styleOpts = [
+    `<option value="" ${!s.image_art_style?'selected':''}>Default (Realistic Fantasy)</option>`,
+    ...styles.filter(st => st.enabled).map(st =>
+      `<option value="${st.key}" ${s.image_art_style===st.key?'selected':''}>${st.label}</option>`
+    )
+  ].join('');
+
+  const stylesTable = styles.length ? `
+    <div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="card-title" style="margin:0">🎨 Art Styles</div>
+        <button class="btn btn-primary btn-sm" onclick="showAddArtStyle()">+ Add Style</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Key</th><th>Label</th><th>Prefix (sent to AI)</th><th>Negative</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${styles.map(st => `<tr>
+          <td class="mono" style="font-size:11px">${st.key}</td>
+          <td>${st.label}</td>
+          <td style="font-size:11px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis">${st.prefix}</td>
+          <td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis">${st.negative||'—'}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="toggleArtStyle(${st.id},${st.enabled})">${st.enabled?'✅ On':'⭕ Off'}</button></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick="showEditArtStyle(${st.id},'${st.key}','${st.label}','${st.prefix.replace(/'/g,"\'")}','${(st.negative||'').replace(/'/g,"\'")}')">Edit</button>
+            <button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteArtStyle(${st.id})">Delete</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : '';
+
+  const settingsHtml = `<div class="card" style="margin-bottom:16px">
+    <div class="card-title">⚙️ Image Generation Settings</div>
+    <div class="settings-grid">
+      <div class="form-field"><label>Width (px)</label><input id="rps-image_width" type="number" min="256" max="1280" step="64" value="${s.image_width||832}" /></div>
+      <div class="form-field"><label>Height (px)</label><input id="rps-image_height" type="number" min="256" max="1280" step="64" value="${s.image_height||512}" /></div>
+      <div class="form-field"><label>Steps (fewer = faster)</label><input id="rps-image_steps" type="number" min="1" max="20" value="${s.image_steps||4}" /></div>
+      <div class="form-field"><label>CFG Scale</label><input id="rps-image_cfg" type="number" min="1" max="15" step="0.5" value="${s.image_cfg||2.0}" /></div>
+      <div class="form-field"><label>Scene cooldown (seconds)</label><input id="rps-image_cooldown" type="number" min="10" max="300" value="${s.image_cooldown||45}" /></div>
+      <div class="form-field"><label>Image Generation</label>
+        <select id="rps-image_enabled">
+          <option value="true" ${s.image_enabled==='true'?'selected':''}>Enabled</option>
+          <option value="false" ${s.image_enabled==='false'?'selected':''}>Disabled</option>
+        </select>
+      </div>
+      <div class="form-field" style="grid-column:1/-1"><label>Art Style</label>
+        <select id="rps-image_art_style">${styleOpts}</select>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;justify-content:flex-end">
+      <button class="btn btn-primary btn-sm" onclick="saveRpgSettings()">Save Settings</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">
+      Changes apply immediately. Lower steps (2-4) = faster generation. Lightning models work best at CFG 1.5-2.5.
+    </p>
+    ${stylesTable}
+  </div>`;
+
+  const el = document.getElementById('rpgtriggers-content');
+  if (el) el.insertAdjacentHTML('afterbegin', settingsHtml);
+}
+
+async function saveRpgSettings() {
+  const keys = ['image_width','image_height','image_steps','image_cfg','image_cooldown','image_enabled','image_art_style'];
+  const payload = {};
+  for (const k of keys) {
+    const el = document.getElementById(`rps-${k}`);
+    if (el) payload[k] = el.value;
+  }
+  try {
+    await apiWrite('/api/rpg/settings', 'POST', payload);
+    toast('✓ RPG image settings saved');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// Settings loaded via loadRpgSettings() called after render in loadPage
+
+// ── Art Style CRUD ────────────────────────────────────────────────────────────
+function showAddArtStyle() {
+  openModal('Add Art Style', `
+    <div class="form-field"><label>Key (unique identifier)</label><input id="as-key" placeholder="e.g. anime, comic, myStyle" /></div>
+    <div class="form-field"><label>Label (display name)</label><input id="as-label" placeholder="e.g. Anime" /></div>
+    <div class="form-field"><label>Prefix (prepended to every prompt)</label><input id="as-prefix" placeholder="e.g. anime style, Studio Ghibli, cel shaded," /></div>
+    <div class="form-field"><label>Negative (added to negative prompt)</label><input id="as-neg" placeholder="e.g. realistic, photorealistic" /></div>
+  `, `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="submitAddArtStyle()">Add Style</button>
+  `);
+}
+
+async function submitAddArtStyle() {
+  const key    = document.getElementById('as-key').value.trim().toLowerCase().replace(/\s+/g,'_');
+  const label  = document.getElementById('as-label').value.trim();
+  const prefix = document.getElementById('as-prefix').value.trim();
+  const neg    = document.getElementById('as-neg').value.trim();
+  if (!key || !label || !prefix) { toast('Key, label and prefix are required', 'error'); return; }
+  try {
+    await apiWrite('/api/rpg/styles', 'POST', { key, label, prefix, negative: neg });
+    closeModal(); toast('✓ Art style added');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function showEditArtStyle(id, key, label, prefix, neg) {
+  openModal('Edit Art Style', `
+    <div class="form-field"><label>Key</label><input id="eas-key" value="${key}" /></div>
+    <div class="form-field"><label>Label</label><input id="eas-label" value="${label}" /></div>
+    <div class="form-field"><label>Prefix</label><input id="eas-prefix" value="${prefix}" /></div>
+    <div class="form-field"><label>Negative</label><input id="eas-neg" value="${neg}" /></div>
+  `, `
+    <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary btn-sm" onclick="submitEditArtStyle(${id})">Save</button>
+  `);
+}
+
+async function submitEditArtStyle(id) {
+  const key    = document.getElementById('eas-key').value.trim();
+  const label  = document.getElementById('eas-label').value.trim();
+  const prefix = document.getElementById('eas-prefix').value.trim();
+  const neg    = document.getElementById('eas-neg').value.trim();
+  if (!key || !label || !prefix) { toast('Key, label and prefix are required', 'error'); return; }
+  try {
+    await apiWrite(`/api/rpg/styles/${id}`, 'POST', { key, label, prefix, negative: neg, enabled: true });
+    closeModal(); toast('✓ Art style updated');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleArtStyle(id, current) {
+  try {
+    await apiWrite(`/api/rpg/styles/${id}`, 'POST', { enabled: !current });
+    toast(current ? '⭕ Style disabled' : '✅ Style enabled');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteArtStyle(id) {
+  if (!confirm('Delete this art style?')) return;
+  try {
+    await apiWrite(`/api/rpg/styles/${id}`, 'DELETE', {});
+    toast('✓ Art style deleted');
+    loaded.delete('rpgtriggers'); loadPage('rpgtriggers');
   } catch(e) { toast(e.message, 'error'); }
 }
 </script>
